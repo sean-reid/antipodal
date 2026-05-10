@@ -43,76 +43,92 @@ jobs:
       - name: Pull Open-Meteo image
         run: docker pull ghcr.io/open-meteo/open-meteo
 
-      - name: Create data volume
-        run: docker volume create open-meteo-data
-
-      - name: Sync ERA5 hourly data
+      - name: Process year-by-year
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 860e267e26cbf52bdca301d114b3c203
         run: |
           START_YEAR=$(echo "${{ inputs.start_date }}" | cut -d- -f1)
           END_YEAR=$(echo "${{ inputs.end_date }}" | cut -d- -f1)
-          echo "Syncing ERA5 hourly data for ${START_YEAR}-${END_YEAR}..."
-          docker run --rm \
-            -v open-meteo-data:/app/data \
-            ghcr.io/open-meteo/open-meteo \
-            sync copernicus_era5 temperature_2m,pressure_msl \
-            --year ${START_YEAR}-${END_YEAR} \
-            --concurrent 4
-        timeout-minutes: 180
 
-      - name: Start Open-Meteo server
-        run: |
-          docker run -d --name open-meteo-api \
-            -v open-meteo-data:/app/data \
-            -p 8080:8080 \
-            ghcr.io/open-meteo/open-meteo \
-            serve --env production --hostname 0.0.0.0 --port 8080
-
-      - name: Wait for API health
-        run: |
-          echo "Waiting for Open-Meteo API..."
-          for i in $(seq 1 60); do
-            if curl -sf "http://localhost:8080/v1/archive?latitude=0&longitude=0&start_date=2020-01-01&end_date=2020-01-02&daily=temperature_2m_mean&models=era5" > /dev/null 2>&1; then
-              echo "API is healthy after ${i}s"
-              exit 0
+          for YEAR in $(seq $START_YEAR $END_YEAR); do
+            CHUNK_START="${YEAR}-01-01"
+            CHUNK_END="${YEAR}-12-31"
+            if [ "$YEAR" -eq "$START_YEAR" ]; then
+              CHUNK_START="${{ inputs.start_date }}"
             fi
-            sleep 1
+            if [ "$YEAR" -eq "$END_YEAR" ]; then
+              CHUNK_END="${{ inputs.end_date }}"
+            fi
+
+            echo ""
+            echo "=========================================="
+            echo "  Year $YEAR: $CHUNK_START to $CHUNK_END"
+            echo "=========================================="
+            echo ""
+            df -h / | tail -1
+
+            echo "--- Syncing ERA5 data for $YEAR ---"
+            docker volume create open-meteo-data
+            docker run --rm \
+              -v open-meteo-data:/app/data \
+              ghcr.io/open-meteo/open-meteo \
+              sync copernicus_era5 temperature_2m,pressure_msl \
+              --year ${YEAR}-${YEAR} \
+              --concurrent 4
+
+            echo "--- Starting API server ---"
+            docker run -d --name open-meteo-api \
+              -v open-meteo-data:/app/data \
+              -p 8080:8080 \
+              ghcr.io/open-meteo/open-meteo \
+              serve --env production --hostname 0.0.0.0 --port 8080
+
+            echo "--- Waiting for API health ---"
+            for i in $(seq 1 60); do
+              if curl -sf "http://localhost:8080/v1/archive?latitude=0&longitude=0&start_date=${CHUNK_START}&end_date=${CHUNK_START}&daily=temperature_2m_mean&models=era5" > /dev/null 2>&1; then
+                echo "API healthy after ${i}s"
+                break
+              fi
+              sleep 1
+              if [ "$i" -eq 60 ]; then
+                echo "API failed to start"
+                docker logs open-meteo-api
+                exit 1
+              fi
+            done
+
+            echo "--- Running pipeline ---"
+            pnpm --filter @antipodal/data-pipeline pipeline \
+              --base-url http://localhost:8080 \
+              --points ${{ inputs.grid_points }} \
+              --range "$CHUNK_START" "$CHUNK_END"
+
+            echo "--- Uploading to R2 ---"
+            cd packages/data-pipeline
+            for file in output/months/*.json; do
+              key="months/$(basename "$file")"
+              npx wrangler r2 object put "antipodal-data/$key" --file "$file" --remote
+            done
+            if [ "$YEAR" -eq "$START_YEAR" ]; then
+              npx wrangler r2 object put antipodal-data/grid.json --file output/grid.json --remote
+            fi
+            echo "Uploaded $(ls output/months/*.json | wc -l) monthly files for $YEAR"
+            rm -rf output/months/*.json
+            cd ../..
+
+            echo "--- Cleaning up Docker for next year ---"
+            docker stop open-meteo-api 2>/dev/null || true
+            docker rm open-meteo-api 2>/dev/null || true
+            docker volume rm open-meteo-data 2>/dev/null || true
           done
-          echo "API failed to start within 60s"
-          docker logs open-meteo-api
-          exit 1
-
-      - name: Run data pipeline
-        run: |
-          pnpm --filter @antipodal/data-pipeline pipeline \
-            --base-url http://localhost:8080 \
-            --points ${{ inputs.grid_points }} \
-            --range ${{ inputs.start_date }} ${{ inputs.end_date }}
-
-      - name: Upload grid.json to R2
-        run: npx wrangler r2 object put antipodal-data/grid.json --file output/grid.json --remote
-        working-directory: packages/data-pipeline
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: 860e267e26cbf52bdca301d114b3c203
-
-      - name: Upload monthly files to R2
-        working-directory: packages/data-pipeline
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: 860e267e26cbf52bdca301d114b3c203
-        run: |
-          for file in output/months/*.json; do
-            key="months/$(basename "$file")"
-            npx wrangler r2 object put "antipodal-data/$key" --file "$file" --remote
-          done
-          echo "Uploaded $(ls output/months/*.json | wc -l) monthly files to R2"
 
       - name: Upload summary to R2
-        run: npx wrangler r2 object put antipodal-data/summary.json --file output/summary.json --remote
         working-directory: packages/data-pipeline
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: 860e267e26cbf52bdca301d114b3c203
+        run: npx wrangler r2 object put antipodal-data/summary.json --file output/summary.json --remote
 
       - name: Cleanup
         if: always()

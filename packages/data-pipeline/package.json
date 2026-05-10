@@ -6,6 +6,7 @@
   "scripts": {
     "pipeline": "tsx src/index.ts",
     "pipeline:resume": "tsx src/index.ts --resume",
+    "mock": "tsx src/mock.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

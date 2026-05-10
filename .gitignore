@@ -8,6 +8,8 @@ dist/
 
 # Build outputs
 apps/web/public/data/
+packages/data-pipeline/output/
+package-lock.json
 
 # OS
 .DS_Store

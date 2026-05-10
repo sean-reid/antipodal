@@ -1,27 +1,41 @@
-import { antipodal } from "@antipodal/geo";
+import { antipodal, findNearestPoints, idwInterpolate } from "@antipodal/geo";
 import type { Env } from "../index.js";
-import { interpolateWeather } from "../lib/interpolate.js";
+import type { GridPoint, DayEntry, MonthFile } from "../types.js";
 import { loadCachedJson } from "../lib/r2cache.js";
-
-interface GridPoint {
-  lat: number;
-  lng: number;
-}
-
-interface DayEntry {
-  date: string;
-  values: Array<{ temp: number; pressure: number }>;
-}
-
-interface MonthFile {
-  days: DayEntry[];
-}
 
 function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+function interpolateFromNearest(
+  lat: number,
+  lng: number,
+  grid: GridPoint[],
+  dayData: DayEntry[],
+  tempKey: "t1" | "t2",
+  pressureKey: "p1" | "p2",
+): { temp: number; pressure: number } {
+  const coords = grid.map((g) => ({ lat: g.lat, lng: g.lng }));
+  const nearest = findNearestPoints(lat, lng, coords, 3);
+
+  const tempPoints = nearest
+    .filter((p) => dayData[p.index][tempKey] !== null)
+    .map((p) => ({ value: dayData[p.index][tempKey] as number, distance: p.distance }));
+
+  const pressurePoints = nearest
+    .filter((p) => dayData[p.index][pressureKey] !== null)
+    .map((p) => ({ value: dayData[p.index][pressureKey] as number, distance: p.distance }));
+
+  const temp = tempPoints.length > 0 ? idwInterpolate(tempPoints) : 0;
+  const pressure = pressurePoints.length > 0 ? idwInterpolate(pressurePoints) : 0;
+
+  return {
+    temp: Math.round(temp * 100) / 100,
+    pressure: Math.round(pressure * 100) / 100,
+  };
 }
 
 export async function handleWeather(request: Request, env: Env): Promise<Response> {
@@ -60,15 +74,15 @@ export async function handleWeather(request: Request, env: Env): Promise<Respons
     return jsonResponse({ error: "No data for the requested month" }, 404);
   }
 
-  const dayEntry = monthData.days.find((d) => d.date === date);
-  if (!dayEntry) {
+  const dayData = monthData.days[date];
+  if (!dayData) {
     return jsonResponse({ error: "No data for the requested date" }, 404);
   }
 
-  const point = interpolateWeather(lat, lng, grid, dayEntry.values);
+  const point = interpolateFromNearest(lat, lng, grid, dayData, "t1", "p1");
 
   const anti = antipodal(lat, lng);
-  const antipodePoint = interpolateWeather(anti.lat, anti.lng, grid, dayEntry.values);
+  const antipodePoint = interpolateFromNearest(anti.lat, anti.lng, grid, dayData, "t1", "p1");
 
   return jsonResponse({
     point: { lat, lng, temp: point.temp, pressure: point.pressure },

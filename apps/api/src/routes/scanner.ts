@@ -1,20 +1,6 @@
-import { antipodal } from "@antipodal/geo";
 import type { Env } from "../index.js";
+import type { GridPoint, DayEntry, MonthFile } from "../types.js";
 import { loadCachedJson } from "../lib/r2cache.js";
-
-interface GridPoint {
-  lat: number;
-  lng: number;
-}
-
-interface DayEntry {
-  date: string;
-  values: Array<{ temp: number; pressure: number }>;
-}
-
-interface MonthFile {
-  days: DayEntry[];
-}
 
 function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -50,8 +36,8 @@ export async function handleScanner(request: Request, env: Env): Promise<Respons
     return jsonResponse({ error: "No data for the requested month" }, 404);
   }
 
-  const dayEntry = monthData.days.find((d) => d.date === date);
-  if (!dayEntry) {
+  const dayData = monthData.days[date];
+  if (!dayData) {
     return jsonResponse({ error: "No data for the requested date" }, 404);
   }
 
@@ -59,18 +45,14 @@ export async function handleScanner(request: Request, env: Env): Promise<Respons
   let smallestCombined = Infinity;
 
   const points = grid.map((gridPoint, i) => {
-    const anti = antipodal(gridPoint.lat, gridPoint.lng);
-    const val = dayEntry.values[i];
+    const entry = dayData[i];
+    const hasNull =
+      entry.t1 === null || entry.p1 === null ||
+      entry.t2 === null || entry.p2 === null;
 
-    // Find the antipodal grid point's value by looking up the nearest grid point
-    // to the antipodal coordinates. Since the grid is a fibonacci sphere, antipodal
-    // points map back onto other grid points.
-    const antiIndex = findAntipodalIndex(grid, anti.lat, anti.lng);
-    const antiVal = dayEntry.values[antiIndex];
-
-    const tempDelta = Math.round((val.temp - antiVal.temp) * 100) / 100;
-    const pressureDelta = Math.round((val.pressure - antiVal.pressure) * 100) / 100;
-    const combined = Math.abs(tempDelta) + Math.abs(pressureDelta);
+    const tempDelta = hasNull ? 0 : Math.round(((entry.t1 as number) - (entry.t2 as number)) * 100) / 100;
+    const pressureDelta = hasNull ? 0 : Math.round(((entry.p1 as number) - (entry.p2 as number)) * 100) / 100;
+    const combined = hasNull ? Infinity : Math.abs(tempDelta) + Math.abs(pressureDelta);
 
     if (combined < smallestCombined) {
       smallestCombined = combined;
@@ -80,12 +62,12 @@ export async function handleScanner(request: Request, env: Env): Promise<Respons
     return {
       lat: gridPoint.lat,
       lng: gridPoint.lng,
-      antiLat: anti.lat,
-      antiLng: anti.lng,
-      temp: val.temp,
-      pressure: val.pressure,
-      antiTemp: antiVal.temp,
-      antiPressure: antiVal.pressure,
+      antiLat: gridPoint.antiLat,
+      antiLng: gridPoint.antiLng,
+      temp: entry.t1,
+      pressure: entry.p1,
+      antiTemp: entry.t2,
+      antiPressure: entry.p2,
       tempDelta,
       pressureDelta,
     };
@@ -105,25 +87,4 @@ export async function handleScanner(request: Request, env: Env): Promise<Respons
       pressureDelta: closest.pressureDelta,
     },
   });
-}
-
-function findAntipodalIndex(
-  grid: GridPoint[],
-  antiLat: number,
-  antiLng: number,
-): number {
-  let bestIndex = 0;
-  let bestDist = Infinity;
-
-  for (let i = 0; i < grid.length; i++) {
-    const dLat = grid[i].lat - antiLat;
-    const dLng = grid[i].lng - antiLng;
-    const dist = dLat * dLat + dLng * dLng;
-    if (dist < bestDist) {
-      bestDist = dist;
-      bestIndex = i;
-    }
-  }
-
-  return bestIndex;
 }

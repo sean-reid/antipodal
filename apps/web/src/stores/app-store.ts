@@ -91,3 +91,7 @@ export const useAppStore = create<AppState>((set) => ({
 
 	reset: () => set(initialState),
 }));
+
+if (typeof window !== "undefined") {
+	(window as any).__ZUSTAND_STORE__ = useAppStore;
+}

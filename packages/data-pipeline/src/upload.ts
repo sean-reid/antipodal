@@ -1,10 +1,6 @@
 import { writeFile, mkdir, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { gzip } from "node:zlib";
-import { promisify } from "node:util";
 import type { GridPoint, MonthlyData } from "./transform.js";
-
-const gzipAsync = promisify(gzip);
 
 const OUTPUT_DIR = join(process.cwd(), "output");
 const MONTHS_DIR = join(OUTPUT_DIR, "months");
@@ -23,8 +19,7 @@ export async function writeOutputFiles(
 
   let monthCount = 0;
   for (const [monthKey, data] of monthlyData) {
-    const compressed = await gzipAsync(Buffer.from(JSON.stringify(data)));
-    await writeFile(join(MONTHS_DIR, `${monthKey}.json`), compressed);
+    await writeFile(join(MONTHS_DIR, `${monthKey}.json`), JSON.stringify(data));
     monthCount++;
   }
 

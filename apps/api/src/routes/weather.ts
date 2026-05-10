@@ -82,7 +82,7 @@ export async function handleWeather(request: Request, env: Env): Promise<Respons
 	const point = interpolateFromNearest(lat, lng, grid, dayData, "t1", "p1");
 
 	const anti = antipodal(lat, lng);
-	const antipodePoint = interpolateFromNearest(anti.lat, anti.lng, grid, dayData, "t1", "p1");
+	const antipodePoint = interpolateFromNearest(anti.lat, anti.lng, grid, dayData, "t2", "p2");
 
 	return jsonResponse({
 		point: { lat, lng, temp: point.temp, pressure: point.pressure },

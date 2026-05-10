@@ -1,0 +1,60 @@
+name: Data Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      grid_points:
+        description: "Number of Fibonacci sphere grid points"
+        default: "500"
+        type: string
+      start_date:
+        description: "Start date (YYYY-MM-DD)"
+        default: "1940-01-01"
+        type: string
+      end_date:
+        description: "End date (YYYY-MM-DD)"
+        default: "2024-12-31"
+        type: string
+
+jobs:
+  fetch-and-upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @antipodal/geo build
+
+      - name: Run data pipeline
+        run: pnpm --filter @antipodal/data-pipeline pipeline --points ${{ inputs.grid_points }} --range ${{ inputs.start_date }} ${{ inputs.end_date }}
+
+      - name: Upload grid.json to R2
+        run: npx wrangler r2 object put antipodal-data/grid.json --file output/grid.json
+        working-directory: packages/data-pipeline
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 860e267e26cbf52bdca301d114b3c203
+
+      - name: Upload monthly files to R2
+        working-directory: packages/data-pipeline
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 860e267e26cbf52bdca301d114b3c203
+        run: |
+          for file in output/months/*.json; do
+            key="months/$(basename "$file")"
+            npx wrangler r2 object put "antipodal-data/$key" --file "$file"
+          done
+          echo "Uploaded $(ls output/months/*.json | wc -l) monthly files to R2"
+
+      - name: Upload summary
+        run: npx wrangler r2 object put antipodal-data/summary.json --file output/summary.json
+        working-directory: packages/data-pipeline
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 860e267e26cbf52bdca301d114b3c203

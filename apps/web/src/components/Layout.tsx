@@ -1,6 +1,9 @@
 import { Globe } from "./Globe";
 import { TimeSlider } from "./TimeSlider";
 import { ComparisonView } from "./ComparisonView";
+import { SearchBar } from "./SearchBar";
+import { Scanner } from "./Scanner";
+import { EducationPanel } from "./EducationPanel";
 import { useWeather } from "@/hooks/useWeather";
 import { useAppStore } from "@/stores/app-store";
 
@@ -11,17 +14,36 @@ export function Layout() {
 	const antipodalPoint = useAppStore((s) => s.antipodalPoint);
 	const weatherData = useAppStore((s) => s.weatherData);
 	const error = useAppStore((s) => s.error);
+	const toggleEducation = useAppStore((s) => s.toggleEducation);
 
 	return (
 		<div className="relative h-dvh w-full overflow-hidden bg-navy-950">
 			<header className="absolute top-0 left-0 right-0 z-10 pointer-events-none px-4 py-3 sm:px-6 sm:py-4">
-				<div className="pointer-events-auto inline-block">
-					<h1 className="text-lg sm:text-xl font-semibold tracking-tight text-slate-200">
-						Antipodal
-					</h1>
-					<p className="text-xs sm:text-sm font-serif italic text-slate-400">
-						Exploring the Borsuk-Ulam Theorem
-					</p>
+				<div className="flex items-start justify-between">
+					<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+						<div className="pointer-events-auto inline-block">
+							<h1 className="text-lg sm:text-xl font-semibold tracking-tight text-slate-200">
+								Antipodal
+							</h1>
+							<p className="text-xs sm:text-sm font-serif italic text-slate-400">
+								Exploring the Borsuk-Ulam Theorem
+							</p>
+						</div>
+						<div className="pointer-events-auto">
+							<SearchBar />
+						</div>
+					</div>
+					<button
+						onClick={toggleEducation}
+						className="pointer-events-auto flex items-center justify-center h-8 w-8 rounded-full border border-navy-700 bg-navy-900/80 backdrop-blur-sm text-slate-400 hover:text-amber-500 hover:border-amber-500/50 transition-colors"
+						aria-label="Learn about the Borsuk-Ulam theorem"
+					>
+						<svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+							<circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.5" />
+							<path d="M5.5 5.5a1.5 1.5 0 1 1 2.12 1.37c-.42.24-.62.5-.62.88V8.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+							<circle cx="7" cy="10.25" r="0.75" fill="currentColor" />
+						</svg>
+					</button>
 				</div>
 			</header>
 
@@ -63,6 +85,8 @@ export function Layout() {
 					max-h-[40vh] sm:max-h-[calc(100vh-8rem)] overflow-y-auto
 				">
 					<ComparisonView />
+					<div className="h-px bg-navy-700 my-4" />
+					<Scanner />
 				</aside>
 			)}
 
@@ -75,6 +99,8 @@ export function Layout() {
 			<div className="absolute bottom-0 left-0 right-0 z-10 px-4 sm:px-6 pb-4 sm:pb-6 pt-2">
 				<TimeSlider />
 			</div>
+
+			<EducationPanel />
 		</div>
 	);
 }

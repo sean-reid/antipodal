@@ -1,6 +1,7 @@
 name = "antipodal-api"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
+account_id = "860e267e26cbf52bdca301d114b3c203"
 
 [[r2_buckets]]
 binding = "DATA_BUCKET"

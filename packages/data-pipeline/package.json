@@ -6,6 +6,7 @@
   "scripts": {
     "pipeline": "tsx src/index.ts",
     "pipeline:resume": "tsx src/index.ts --resume",
+    "pipeline:local": "tsx src/index.ts --base-url http://localhost:8080",
     "mock": "tsx src/mock.ts",
     "typecheck": "tsc --noEmit"
   },

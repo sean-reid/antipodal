@@ -11,11 +11,13 @@ function parseArgs() {
 	const rangeIdx = args.indexOf("--range");
 	const startDate = rangeIdx !== -1 ? args[rangeIdx + 1] : "1940-01-01";
 	const endDate = rangeIdx !== -1 ? args[rangeIdx + 2] : "2024-12-31";
-	return { resume, gridSize, startDate, endDate };
+	const baseUrlIdx = args.indexOf("--base-url");
+	const baseUrl = baseUrlIdx !== -1 ? args[baseUrlIdx + 1] : undefined;
+	return { resume, gridSize, startDate, endDate, baseUrl };
 }
 
 async function main() {
-	const { resume, gridSize, startDate, endDate } = parseArgs();
+	const { resume, gridSize, startDate, endDate, baseUrl } = parseArgs();
 	const startTime = Date.now();
 
 	console.log(`Generating ${gridSize}-point Fibonacci sphere grid`);
@@ -39,9 +41,13 @@ async function main() {
 	console.log(
 		`Fetching weather for ${allLocations.length} locations (${startDate} to ${endDate})${resume ? " (resuming)" : ""}`,
 	);
-	console.log("Batched requests keep us well under the 10K daily API limit.\n");
 
-	const rawData = await fetchAllWeather(allLocations, resume, startDate, endDate);
+	const rawData = await fetchAllWeather(allLocations, {
+		resume,
+		startDate,
+		endDate,
+		baseUrl,
+	});
 
 	console.log("Transforming to monthly files...");
 	const monthlyData = transformToMonthlyFiles(grid, rawData);

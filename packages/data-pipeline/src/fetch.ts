@@ -1,13 +1,25 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-const ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive";
+const DEFAULT_BASE_URL = "https://archive-api.open-meteo.com";
 
-const BATCH_SIZE = 10;
-const DELAY_BETWEEN_BATCHES_MS = 6_000;
+const REMOTE_BATCH_SIZE = 10;
+const LOCAL_BATCH_SIZE = 50;
+
+const REMOTE_DELAY_MS = 6_000;
+const LOCAL_DELAY_MS = 100;
+
+const REMOTE_BUDGET = 5_000;
+
 const DELAY_AFTER_MINUTELY_LIMIT_MS = 90_000;
-const REQUEST_BUDGET = 5_000;
 const CHECKPOINT_INTERVAL = 5;
+
+export interface FetchOptions {
+	resume?: boolean;
+	startDate?: string;
+	endDate?: string;
+	baseUrl?: string;
+}
 
 export interface DailyData {
 	time: string[];
@@ -23,6 +35,10 @@ interface Checkpoint {
 
 const OUTPUT_DIR = join(process.cwd(), "output");
 const CHECKPOINT_PATH = join(OUTPUT_DIR, "checkpoint.json");
+
+function isLocal(baseUrl: string): boolean {
+	return baseUrl.includes("localhost") || baseUrl.includes("127.0.0.1");
+}
 
 function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
@@ -44,9 +60,9 @@ class BudgetExhaustedError extends Error {
 	}
 }
 
-async function preflight(): Promise<void> {
-	console.log("Pre-flight check: verifying API availability...");
-	const url = `${ARCHIVE_URL}?latitude=0&longitude=0&start_date=2020-01-01&end_date=2020-01-02&daily=temperature_2m_mean&timezone=UTC`;
+async function healthCheck(archiveUrl: string): Promise<void> {
+	console.log("Health check: verifying API availability...");
+	const url = `${archiveUrl}?latitude=0&longitude=0&start_date=2020-01-01&end_date=2020-01-02&daily=temperature_2m_mean&models=era5&timezone=UTC`;
 	const res = await fetch(url);
 	if (!res.ok) {
 		const body = await res.text().catch(() => "");
@@ -55,23 +71,24 @@ async function preflight(): Promise<void> {
 				"Daily API limit already exhausted. Wait for reset (midnight UTC) and try again.",
 			);
 		}
-		throw new Error(`Pre-flight failed: HTTP ${res.status} - ${body.slice(0, 300)}`);
+		throw new Error(`Health check failed: HTTP ${res.status} - ${body.slice(0, 300)}`);
 	}
 	const json = await res.json();
 	if (json.error) {
-		throw new Error(`Pre-flight failed: ${json.reason || JSON.stringify(json)}`);
+		throw new Error(`Health check failed: ${json.reason || JSON.stringify(json)}`);
 	}
-	console.log("Pre-flight passed. API is available.\n");
+	console.log("Health check passed. API is available.\n");
 }
 
 function buildBatchUrl(
+	archiveUrl: string,
 	locations: Array<{ lat: number; lng: number }>,
 	startDate: string,
 	endDate: string,
 ): string {
 	const lats = locations.map((l) => l.lat.toFixed(4)).join(",");
 	const lngs = locations.map((l) => l.lng.toFixed(4)).join(",");
-	return `${ARCHIVE_URL}?latitude=${lats}&longitude=${lngs}&start_date=${startDate}&end_date=${endDate}&daily=temperature_2m_mean,pressure_msl_mean&timezone=UTC`;
+	return `${archiveUrl}?latitude=${lats}&longitude=${lngs}&start_date=${startDate}&end_date=${endDate}&daily=temperature_2m_mean,pressure_msl_mean&models=era5&timezone=UTC`;
 }
 
 function parseErrorCategory(body: string): "daily" | "minutely" | "hourly" | "unknown" {
@@ -83,11 +100,12 @@ function parseErrorCategory(body: string): "daily" | "minutely" | "hourly" | "un
 }
 
 async function fetchBatch(
+	archiveUrl: string,
 	locations: Array<{ lat: number; lng: number }>,
 	startDate: string,
 	endDate: string,
 ): Promise<DailyData[]> {
-	const url = buildBatchUrl(locations, startDate, endDate);
+	const url = buildBatchUrl(archiveUrl, locations, startDate, endDate);
 	const res = await fetch(url);
 
 	if (!res.ok) {
@@ -208,15 +226,32 @@ function formatEta(remainingBatches: number, msPerBatch: number): string {
 
 export async function fetchAllWeather(
 	locations: Array<{ lat: number; lng: number }>,
-	resumeFrom?: boolean,
-	startDate = "1940-01-01",
-	endDate = "2024-12-31",
+	options: FetchOptions = {},
 ): Promise<Map<number, DailyData>> {
-	await preflight();
+	const {
+		resume: resumeFrom,
+		startDate = "1940-01-01",
+		endDate = "2024-12-31",
+		baseUrl = DEFAULT_BASE_URL,
+	} = options;
+
+	const local = isLocal(baseUrl);
+	const archiveUrl = `${baseUrl}/v1/archive`;
+	const batchSize = local ? LOCAL_BATCH_SIZE : REMOTE_BATCH_SIZE;
+	const delayMs = local ? LOCAL_DELAY_MS : REMOTE_DELAY_MS;
+	const budget = local ? Number.POSITIVE_INFINITY : REMOTE_BUDGET;
+
+	console.log(`Mode: ${local ? "local (no rate limits)" : "remote (rate-limited)"}`);
+	console.log(`API: ${baseUrl}`);
+	console.log(
+		`Batch size: ${batchSize}, delay: ${delayMs}ms, budget: ${local ? "unlimited" : budget}\n`,
+	);
+
+	await healthCheck(archiveUrl);
 
 	let data = new Map<number, DailyData>();
 	let startBatch = 0;
-	let requestCount = 1; // preflight counts as 1
+	let requestCount = 1;
 
 	if (resumeFrom) {
 		const checkpoint = await loadCheckpoint();
@@ -233,8 +268,8 @@ export async function fetchAllWeather(
 	}
 
 	const batches: Array<{ indices: number[]; locs: Array<{ lat: number; lng: number }> }> = [];
-	for (let i = 0; i < locations.length; i += BATCH_SIZE) {
-		const end = Math.min(i + BATCH_SIZE, locations.length);
+	for (let i = 0; i < locations.length; i += batchSize) {
+		const end = Math.min(i + batchSize, locations.length);
 		const indices = Array.from({ length: end - i }, (_, k) => i + k);
 		const locs = indices.map((idx) => locations[idx]);
 		batches.push({ indices, locs });
@@ -246,32 +281,32 @@ export async function fetchAllWeather(
 	const fetchStartTime = Date.now();
 
 	console.log(
-		`${totalLocations} locations in ${totalBatches} batches of ${BATCH_SIZE}. Budget: ${REQUEST_BUDGET} requests.`,
+		`${totalLocations} locations in ${totalBatches} batches of ${batchSize}. Budget: ${local ? "unlimited" : budget} requests.`,
 	);
 	console.log(
-		`Delay between batches: ${DELAY_BETWEEN_BATCHES_MS / 1000}s. Estimated time: ${formatEta(totalBatches - startBatch, DELAY_BETWEEN_BATCHES_MS + 3000)}\n`,
+		`Delay between batches: ${delayMs / 1000}s. Estimated time: ${formatEta(totalBatches - startBatch, delayMs + 3000)}\n`,
 	);
 
 	for (let b = startBatch; b < totalBatches; b++) {
-		if (requestCount >= REQUEST_BUDGET) {
+		if (requestCount >= budget) {
 			await saveCheckpoint(b - 1, data, requestCount);
-			throw new BudgetExhaustedError(requestCount, REQUEST_BUDGET);
+			throw new BudgetExhaustedError(requestCount, budget);
 		}
 
 		const batch = batches[b];
 		const msPerBatch =
 			completedSinceResume > 0
 				? (Date.now() - fetchStartTime) / completedSinceResume
-				: DELAY_BETWEEN_BATCHES_MS + 3000;
+				: delayMs + 3000;
 		const remaining = totalBatches - b;
 		const eta = formatEta(remaining, msPerBatch);
 
 		process.stdout.write(
-			`\rBatch ${b + 1}/${totalBatches} (${batch.locs.length} locs) | ${data.size}/${totalLocations} done | ${requestCount}/${REQUEST_BUDGET} API calls | ETA: ${eta}   `,
+			`\rBatch ${b + 1}/${totalBatches} (${batch.locs.length} locs) | ${data.size}/${totalLocations} done | ${requestCount}/${local ? "∞" : budget} API calls | ETA: ${eta}   `,
 		);
 
 		try {
-			const results = await fetchBatch(batch.locs, startDate, endDate);
+			const results = await fetchBatch(archiveUrl, batch.locs, startDate, endDate);
 			requestCount++;
 
 			for (let j = 0; j < results.length; j++) {
@@ -291,7 +326,7 @@ export async function fetchAllWeather(
 		}
 
 		if (b < totalBatches - 1) {
-			await sleep(DELAY_BETWEEN_BATCHES_MS);
+			await sleep(delayMs);
 		}
 	}
 

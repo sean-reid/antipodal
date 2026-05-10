@@ -19,9 +19,19 @@ on:
 jobs:
   fetch-and-upload:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
+
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: false
+
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -30,8 +40,53 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @antipodal/geo build
 
+      - name: Pull Open-Meteo image
+        run: docker pull ghcr.io/open-meteo/open-meteo
+
+      - name: Create data volume
+        run: docker volume create open-meteo-data
+
+      - name: Sync ERA5 daily data
+        run: |
+          START_YEAR=$(echo "${{ inputs.start_date }}" | cut -d- -f1)
+          END_YEAR=$(echo "${{ inputs.end_date }}" | cut -d- -f1)
+          echo "Syncing ERA5 daily data for ${START_YEAR}-${END_YEAR}..."
+          docker run --rm \
+            -v open-meteo-data:/app/data \
+            ghcr.io/open-meteo/open-meteo \
+            sync copernicus_era5_daily temperature_2m,pressure_msl \
+            --year ${START_YEAR}-${END_YEAR} \
+            --concurrent 4
+        timeout-minutes: 180
+
+      - name: Start Open-Meteo server
+        run: |
+          docker run -d --name open-meteo-api \
+            -v open-meteo-data:/app/data \
+            -p 8080:8080 \
+            ghcr.io/open-meteo/open-meteo \
+            serve --env production --hostname 0.0.0.0 --port 8080
+
+      - name: Wait for API health
+        run: |
+          echo "Waiting for Open-Meteo API..."
+          for i in $(seq 1 60); do
+            if curl -sf "http://localhost:8080/v1/archive?latitude=0&longitude=0&start_date=2020-01-01&end_date=2020-01-02&daily=temperature_2m_mean&models=era5" > /dev/null 2>&1; then
+              echo "API is healthy after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "API failed to start within 60s"
+          docker logs open-meteo-api
+          exit 1
+
       - name: Run data pipeline
-        run: pnpm --filter @antipodal/data-pipeline pipeline --points ${{ inputs.grid_points }} --range ${{ inputs.start_date }} ${{ inputs.end_date }}
+        run: |
+          pnpm --filter @antipodal/data-pipeline pipeline \
+            --base-url http://localhost:8080 \
+            --points ${{ inputs.grid_points }} \
+            --range ${{ inputs.start_date }} ${{ inputs.end_date }}
 
       - name: Upload grid.json to R2
         run: npx wrangler r2 object put antipodal-data/grid.json --file output/grid.json
@@ -52,9 +107,16 @@ jobs:
           done
           echo "Uploaded $(ls output/months/*.json | wc -l) monthly files to R2"
 
-      - name: Upload summary
+      - name: Upload summary to R2
         run: npx wrangler r2 object put antipodal-data/summary.json --file output/summary.json
         working-directory: packages/data-pipeline
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: 860e267e26cbf52bdca301d114b3c203
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop open-meteo-api 2>/dev/null || true
+          docker rm open-meteo-api 2>/dev/null || true
+          docker volume rm open-meteo-data 2>/dev/null || true

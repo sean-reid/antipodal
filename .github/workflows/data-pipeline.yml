@@ -46,15 +46,15 @@ jobs:
       - name: Create data volume
         run: docker volume create open-meteo-data
 
-      - name: Sync ERA5 daily data
+      - name: Sync ERA5 hourly data
         run: |
           START_YEAR=$(echo "${{ inputs.start_date }}" | cut -d- -f1)
           END_YEAR=$(echo "${{ inputs.end_date }}" | cut -d- -f1)
-          echo "Syncing ERA5 daily data for ${START_YEAR}-${END_YEAR}..."
+          echo "Syncing ERA5 hourly data for ${START_YEAR}-${END_YEAR}..."
           docker run --rm \
             -v open-meteo-data:/app/data \
             ghcr.io/open-meteo/open-meteo \
-            sync copernicus_era5_daily temperature_2m,pressure_msl \
+            sync copernicus_era5 temperature_2m,pressure_msl \
             --year ${START_YEAR}-${END_YEAR} \
             --concurrent 4
         timeout-minutes: 180

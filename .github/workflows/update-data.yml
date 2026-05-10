@@ -8,7 +8,7 @@ on:
 jobs:
   incremental-update:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -36,12 +36,56 @@ jobs:
           FETCH_END=$(date -u +%F)
           echo "start=$FETCH_START" >> $GITHUB_OUTPUT
           echo "end=$FETCH_END" >> $GITHUB_OUTPUT
-          echo "last_end=$LAST_END" >> $GITHUB_OUTPUT
           echo "Last endDate: ${LAST_END:-none}. Fetching $FETCH_START to $FETCH_END"
+
+      - name: Pull Open-Meteo image
+        run: docker pull ghcr.io/open-meteo/open-meteo
+
+      - name: Create data volume
+        run: docker volume create open-meteo-data
+
+      - name: Sync ERA5 hourly data
+        run: |
+          START_YEAR=$(echo "${{ steps.dates.outputs.start }}" | cut -d- -f1)
+          END_YEAR=$(echo "${{ steps.dates.outputs.end }}" | cut -d- -f1)
+          echo "Syncing ERA5 hourly data for ${START_YEAR}-${END_YEAR}..."
+          docker run --rm \
+            -v open-meteo-data:/app/data \
+            ghcr.io/open-meteo/open-meteo \
+            sync copernicus_era5 temperature_2m,pressure_msl \
+            --year ${START_YEAR}-${END_YEAR} \
+            --concurrent 4
+        timeout-minutes: 30
+
+      - name: Start Open-Meteo server
+        run: |
+          docker run -d --name open-meteo-api \
+            -v open-meteo-data:/app/data \
+            -p 8080:8080 \
+            ghcr.io/open-meteo/open-meteo \
+            serve --env production --hostname 0.0.0.0 --port 8080
+
+      - name: Wait for API health
+        run: |
+          echo "Waiting for Open-Meteo API..."
+          for i in $(seq 1 60); do
+            if curl -sf "http://localhost:8080/v1/archive?latitude=0&longitude=0&start_date=2020-01-01&end_date=2020-01-02&daily=temperature_2m_mean&models=era5" > /dev/null 2>&1; then
+              echo "API is healthy after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "API failed to start within 60s"
+          docker logs open-meteo-api
+          exit 1
 
       - name: Run pipeline
         working-directory: packages/data-pipeline
-        run: pnpm pipeline --points 5000 --range ${{ steps.dates.outputs.start }} ${{ steps.dates.outputs.end }}
+        run: |
+          pnpm pipeline \
+            --base-url http://localhost:8080 \
+            --points 500 \
+            --range ${{ steps.dates.outputs.start }} ${{ steps.dates.outputs.end }}
 
       - name: Write summary.json
         run: |
@@ -50,7 +94,7 @@ jobs:
             || echo "1940-01-01")
           [ -z "$EXISTING_START" ] && EXISTING_START="1940-01-01"
           cat > packages/data-pipeline/output/summary.json << EOF
-          {"gridPoints":5000,"startDate":"$EXISTING_START","endDate":"${{ steps.dates.outputs.end }}","monthCount":0}
+          {"gridPoints":500,"startDate":"$EXISTING_START","endDate":"${{ steps.dates.outputs.end }}","monthCount":0}
           EOF
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -74,3 +118,10 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler r2 object put antipodal-data/summary.json --file output/summary.json --remote
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop open-meteo-api 2>/dev/null || true
+          docker rm open-meteo-api 2>/dev/null || true
+          docker volume rm open-meteo-data 2>/dev/null || true

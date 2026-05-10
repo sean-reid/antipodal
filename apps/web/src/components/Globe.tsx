@@ -6,7 +6,6 @@ const GLOBE_IMAGE = "/earth-blue-marble.jpg";
 
 const POINT_COLOR = "#f59e0b";
 const ANTIPODE_COLOR = "#0d9488";
-const ARC_COLOR = ["#f59e0b", "#0d9488"];
 
 interface PointData {
 	lat: number;
@@ -16,11 +15,35 @@ interface PointData {
 	size: number;
 }
 
-interface ArcData {
-	startLat: number;
-	startLng: number;
-	endLat: number;
-	endLng: number;
+interface RingData {
+	lat: number;
+	lng: number;
+	color: string;
+	maxR: number;
+	propagationSpeed: number;
+	repeatPeriod: number;
+}
+
+const ringColorAccessor = (d: any) => {
+	const c = d.color;
+	return (t: number) => {
+		const fade = t < 0.7 ? 1 - t * 0.3 : Math.max(0, 1 - (t - 0.7) / 0.3);
+		const alpha = Math.round(fade * 200);
+		return `${c}${alpha.toString(16).padStart(2, "0")}`;
+	};
+};
+
+function clearRingChildren(scene: any) {
+	scene.traverse((obj: any) => {
+		if (obj.__globeObjType === "ring" && obj.children.length > 0) {
+			while (obj.children.length > 0) {
+				const child = obj.children[0];
+				obj.remove(child);
+				if (child.geometry) child.geometry.dispose();
+				if (child.material) child.material.dispose();
+			}
+		}
+	});
 }
 
 export function Globe() {
@@ -58,6 +81,12 @@ export function Globe() {
 		);
 	}, [selectedPoint]);
 
+	useEffect(() => {
+		const globe = globeRef.current;
+		if (!globe) return;
+		clearRingChildren(globe.scene());
+	}, [selectedPoint, antipodalPoint]);
+
 	const pointsData: PointData[] = useMemo(() => {
 		if (!selectedPoint || !antipodalPoint) return [];
 		return [
@@ -66,26 +95,36 @@ export function Globe() {
 				lng: selectedPoint.lng,
 				color: POINT_COLOR,
 				label: "Selected",
-				size: 0.8,
+				size: 1.4,
 			},
 			{
 				lat: antipodalPoint.lat,
 				lng: antipodalPoint.lng,
 				color: ANTIPODE_COLOR,
 				label: "Antipode",
-				size: 0.8,
+				size: 1.4,
 			},
 		];
 	}, [selectedPoint, antipodalPoint]);
 
-	const arcsData: ArcData[] = useMemo(() => {
+	const ringsData: RingData[] = useMemo(() => {
 		if (!selectedPoint || !antipodalPoint) return [];
 		return [
 			{
-				startLat: selectedPoint.lat,
-				startLng: selectedPoint.lng,
-				endLat: antipodalPoint.lat,
-				endLng: antipodalPoint.lng,
+				lat: selectedPoint.lat,
+				lng: selectedPoint.lng,
+				color: POINT_COLOR,
+				maxR: 25,
+				propagationSpeed: 6,
+				repeatPeriod: 600,
+			},
+			{
+				lat: antipodalPoint.lat,
+				lng: antipodalPoint.lng,
+				color: ANTIPODE_COLOR,
+				maxR: 25,
+				propagationSpeed: 6,
+				repeatPeriod: 600,
 			},
 		];
 	}, [selectedPoint, antipodalPoint]);
@@ -105,16 +144,13 @@ export function Globe() {
 			pointLabel="label"
 			pointRadius="size"
 			pointAltitude={0.01}
-			arcsData={arcsData}
-			arcStartLat="startLat"
-			arcStartLng="startLng"
-			arcEndLat="endLat"
-			arcEndLng="endLng"
-			arcColor={() => ARC_COLOR}
-			arcDashLength={0.4}
-			arcDashGap={0.2}
-			arcDashAnimateTime={1500}
-			arcStroke={0.5}
+			ringsData={ringsData}
+			ringLat="lat"
+			ringLng="lng"
+			ringColor={ringColorAccessor}
+			ringMaxRadius="maxR"
+			ringPropagationSpeed="propagationSpeed"
+			ringRepeatPeriod="repeatPeriod"
 			animateIn={true}
 		/>
 	);

@@ -2,7 +2,7 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 const ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive";
-const DELAY_MS = 3000;
+const DELAY_MS = 2000;
 const BACKOFF_BASE_MS = 30_000;
 const BACKOFF_MAX_MS = 180_000;
 const MAX_RETRIES = 5;

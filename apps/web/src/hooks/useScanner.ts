@@ -9,13 +9,15 @@ export function useScanner() {
 	const setScannerData = useAppStore((s) => s.setScannerData);
 	const scannerData = useAppStore((s) => s.scannerData);
 
-	const scan = useCallback(async () => {
+	const scan = useCallback(async (): Promise<ScannerResponse | null> => {
 		setIsScanning(true);
 		try {
-			const data: ScannerResponse = await fetchScanner(selectedDate);
+			const data = await fetchScanner(selectedDate);
 			setScannerData(data);
+			return data;
 		} catch {
 			setScannerData(null);
+			return null;
 		} finally {
 			setIsScanning(false);
 		}

@@ -20,8 +20,8 @@ export function Layout() {
 		<div className="relative h-dvh w-full overflow-hidden bg-navy-950">
 			<header className="absolute top-0 left-0 right-0 z-10 pointer-events-none px-4 py-3 sm:px-6 sm:py-4">
 				<div className="flex items-start justify-between">
-					<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-						<div className="pointer-events-auto inline-block">
+					<div className="pointer-events-auto w-72 sm:w-96">
+						<div className="flex items-baseline gap-3">
 							<h1 className="text-lg sm:text-xl font-semibold tracking-tight text-slate-200">
 								Antipodal
 							</h1>
@@ -29,7 +29,7 @@ export function Layout() {
 								Exploring the Borsuk-Ulam Theorem
 							</p>
 						</div>
-						<div className="pointer-events-auto">
+						<div className="mt-2">
 							<SearchBar />
 						</div>
 					</div>

@@ -26,7 +26,7 @@ export function SearchBar() {
 	const showDropdown = results.length > 0 && query.trim().length >= 2;
 
 	return (
-		<div className="relative w-full sm:w-64">
+		<div className="relative w-full">
 			<div className="relative">
 				<svg
 					className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none"

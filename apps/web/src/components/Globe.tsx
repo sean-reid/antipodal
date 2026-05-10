@@ -1,5 +1,5 @@
 import { useAppStore } from "@/stores/app-store";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import GlobeGL from "react-globe.gl";
 
 const GLOBE_IMAGE = "/earth-blue-marble.jpg";
@@ -52,9 +52,25 @@ function clearRingChildren(scene: any) {
 export default function Globe() {
 	// biome-ignore lint/suspicious/noExplicitAny: react-globe.gl ref has no exported type
 	const globeRef = useRef<any>(null);
+	const containerRef = useRef<HTMLDivElement>(null);
+	const [dimensions, setDimensions] = useState({
+		width: window.innerWidth,
+		height: window.innerHeight,
+	});
 	const selectedPoint = useAppStore((s) => s.selectedPoint);
 	const antipodalPoint = useAppStore((s) => s.antipodalPoint);
 	const setSelectedPoint = useAppStore((s) => s.setSelectedPoint);
+
+	useEffect(() => {
+		const el = containerRef.current;
+		if (!el) return;
+		const ro = new ResizeObserver(([entry]) => {
+			const { width, height } = entry.contentRect;
+			if (width > 0 && height > 0) setDimensions({ width, height });
+		});
+		ro.observe(el);
+		return () => ro.disconnect();
+	}, []);
 
 	const handleGlobeClick = useCallback(
 		({ lat, lng }: { lat: number; lng: number }) => {
@@ -132,28 +148,32 @@ export default function Globe() {
 	}, [selectedPoint, antipodalPoint]);
 
 	return (
-		<GlobeGL
-			ref={globeRef}
-			globeImageUrl={GLOBE_IMAGE}
-			backgroundColor="rgba(0,0,0,0)"
-			atmosphereColor="#4a6fa5"
-			atmosphereAltitude={0.15}
-			onGlobeClick={handleGlobeClick}
-			pointsData={pointsData}
-			pointLat="lat"
-			pointLng="lng"
-			pointColor="color"
-			pointLabel="label"
-			pointRadius="size"
-			pointAltitude={0.01}
-			ringsData={ringsData}
-			ringLat="lat"
-			ringLng="lng"
-			ringColor={ringColorAccessor}
-			ringMaxRadius="maxR"
-			ringPropagationSpeed="propagationSpeed"
-			ringRepeatPeriod="repeatPeriod"
-			animateIn={true}
-		/>
+		<div ref={containerRef} className="h-full w-full">
+			<GlobeGL
+				ref={globeRef}
+				width={dimensions.width}
+				height={dimensions.height}
+				globeImageUrl={GLOBE_IMAGE}
+				backgroundColor="rgba(0,0,0,0)"
+				atmosphereColor="#4a6fa5"
+				atmosphereAltitude={0.15}
+				onGlobeClick={handleGlobeClick}
+				pointsData={pointsData}
+				pointLat="lat"
+				pointLng="lng"
+				pointColor="color"
+				pointLabel="label"
+				pointRadius="size"
+				pointAltitude={0.01}
+				ringsData={ringsData}
+				ringLat="lat"
+				ringLng="lng"
+				ringColor={ringColorAccessor}
+				ringMaxRadius="maxR"
+				ringPropagationSpeed="propagationSpeed"
+				ringRepeatPeriod="repeatPeriod"
+				animateIn={true}
+			/>
+		</div>
 	);
 }

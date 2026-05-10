@@ -19,6 +19,7 @@ export interface FetchOptions {
 	startDate?: string;
 	endDate?: string;
 	baseUrl?: string;
+	skipHealthCheck?: boolean;
 }
 
 export interface DailyData {
@@ -233,16 +234,18 @@ export async function fetchAllWeather(
 		startDate = "1940-01-01",
 		endDate = "2024-12-31",
 		baseUrl = DEFAULT_BASE_URL,
+		skipHealthCheck = false,
 	} = options;
 
 	const local = isLocal(baseUrl);
 	const archiveUrl = `${baseUrl}/v1/archive`;
 	const batchSize = local ? LOCAL_BATCH_SIZE : REMOTE_BATCH_SIZE;
 
-	console.log(`Mode: ${local ? "local (no rate limits)" : "remote (rate-limited)"}`);
-	console.log(`API: ${baseUrl}`);
-
-	await healthCheck(archiveUrl);
+	if (!skipHealthCheck) {
+		console.log(`Mode: ${local ? "local (no rate limits)" : "remote (rate-limited)"}`);
+		console.log(`API: ${baseUrl}`);
+		await healthCheck(archiveUrl);
+	}
 
 	const batches: Array<{ indices: number[]; locs: Array<{ lat: number; lng: number }> }> = [];
 	for (let i = 0; i < locations.length; i += batchSize) {

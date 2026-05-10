@@ -1,0 +1,19 @@
+{
+  "name": "@antipodal/data-pipeline",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "pipeline": "tsx src/index.ts",
+    "pipeline:resume": "tsx src/index.ts --resume",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@antipodal/geo": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,33 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.turbo/
+.wrangler/
+.dev.vars
+*.local
+
+# Build outputs
+apps/web/public/data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# AI artifacts
+.claude/
+CLAUDE.md
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Test artifacts
+test-results/
+playwright-report/

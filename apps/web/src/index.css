@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+@theme {
+	--color-navy-950: #0a0f1a;
+	--color-navy-900: #0f172a;
+	--color-navy-800: #1e293b;
+	--color-navy-700: #334155;
+	--color-amber-500: #f59e0b;
+	--color-teal-500: #0d9488;
+	--color-slate-200: #e2e8f0;
+	--color-slate-400: #94a3b8;
+	--font-sans: "Inter", sans-serif;
+	--font-serif: "Newsreader", serif;
+}
+
+@layer base {
+	body {
+		@apply bg-navy-950 text-slate-200 font-sans antialiased;
+	}
+}

@@ -59,6 +59,7 @@ export function TimeSlider() {
 				max={MAX_INDEX}
 				value={currentIndex}
 				onChange={handleChange}
+				aria-label={`Date selector: ${displayDate}`}
 				className="w-full max-w-md h-1.5 appearance-none rounded-full bg-navy-700 cursor-pointer accent-amber-500
 					[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4
 					[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-500 [&::-webkit-slider-thumb]:cursor-pointer

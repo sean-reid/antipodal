@@ -115,9 +115,9 @@ function PanelContent({ onClose }: { onClose: () => void }) {
 						guarantees a pair of opposite points where both values match.
 					</p>
 					<p className="font-serif text-slate-200 leading-relaxed mt-3">
-						The proof uses algebraic topology. The key idea: if no such pair existed, you could
-						build a continuous map from the sphere to itself with no fixed points. But such a map
-						cannot exist, which gives us a contradiction.
+						The proof uses algebraic topology. If no such pair existed, you could construct an odd
+						continuous map from the 2-sphere to the circle. But such a map cannot exist, as it would
+						contradict the structure of the sphere's fundamental group under the antipodal action.
 					</p>
 				</section>
 

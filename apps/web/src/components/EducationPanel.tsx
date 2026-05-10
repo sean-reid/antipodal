@@ -201,7 +201,7 @@ function PanelContent({ onClose }: { onClose: () => void }) {
 										</a>
 										, <span className="italic">Fundamenta Mathematicae</span>{" "}
 										<span className="font-medium">20</span>, 177&ndash;190. The conjecture is
-										attributed to Stanis&lstrok;aw Ulam in the paper's footnote 7.
+										attributed to Stanisław Ulam in the paper's footnote 7.
 									</p>
 								</div>
 							</motion.div>

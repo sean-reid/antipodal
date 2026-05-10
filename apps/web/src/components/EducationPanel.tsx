@@ -218,6 +218,15 @@ export function EducationPanel() {
 	const toggle = useAppStore((s) => s.toggleEducation);
 	const isMobile = useIsMobile();
 
+	useEffect(() => {
+		if (!isOpen) return;
+		const handleKey = (e: KeyboardEvent) => {
+			if (e.key === "Escape") toggle();
+		};
+		window.addEventListener("keydown", handleKey);
+		return () => window.removeEventListener("keydown", handleKey);
+	}, [isOpen, toggle]);
+
 	return (
 		<AnimatePresence>
 			{isOpen && (

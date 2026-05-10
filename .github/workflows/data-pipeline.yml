@@ -89,7 +89,7 @@ jobs:
             --range ${{ inputs.start_date }} ${{ inputs.end_date }}
 
       - name: Upload grid.json to R2
-        run: npx wrangler r2 object put antipodal-data/grid.json --file output/grid.json
+        run: npx wrangler r2 object put antipodal-data/grid.json --file output/grid.json --remote
         working-directory: packages/data-pipeline
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -103,12 +103,12 @@ jobs:
         run: |
           for file in output/months/*.json; do
             key="months/$(basename "$file")"
-            npx wrangler r2 object put "antipodal-data/$key" --file "$file"
+            npx wrangler r2 object put "antipodal-data/$key" --file "$file" --remote
           done
           echo "Uploaded $(ls output/months/*.json | wc -l) monthly files to R2"
 
       - name: Upload summary to R2
-        run: npx wrangler r2 object put antipodal-data/summary.json --file output/summary.json
+        run: npx wrangler r2 object put antipodal-data/summary.json --file output/summary.json --remote
         working-directory: packages/data-pipeline
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

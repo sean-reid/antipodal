@@ -29,6 +29,7 @@ interface AppState {
 	selectedPoint: { lat: number; lng: number } | null;
 	antipodalPoint: { lat: number; lng: number } | null;
 	selectedDate: string;
+	dateRange: { start: string; end: string } | null;
 	weatherData: WeatherResponse | null;
 	scannerData: ScannerResponse | null;
 	isEducationOpen: boolean;
@@ -36,6 +37,7 @@ interface AppState {
 	error: string | null;
 	setSelectedPoint: (lat: number, lng: number) => void;
 	setSelectedDate: (date: string) => void;
+	setDateRange: (range: { start: string; end: string }) => void;
 	setWeatherData: (data: WeatherResponse | null) => void;
 	setScannerData: (data: ScannerResponse | null) => void;
 	toggleEducation: () => void;
@@ -48,6 +50,7 @@ const initialState = {
 	selectedPoint: null,
 	antipodalPoint: null,
 	selectedDate: "2020-07-15",
+	dateRange: null,
 	weatherData: null,
 	scannerData: null,
 	isEducationOpen: false,
@@ -68,6 +71,8 @@ export const useAppStore = create<AppState>((set) => ({
 		}),
 
 	setSelectedDate: (date) => set({ selectedDate: date }),
+
+	setDateRange: (range) => set({ dateRange: range }),
 
 	setWeatherData: (data) => set({ weatherData: data }),
 

@@ -47,7 +47,7 @@ export default {
 				response = await handleScanner(request, env);
 				break;
 			case "/api/range":
-				response = await handleRange();
+				response = await handleRange(request, env);
 				break;
 			default:
 				response = new Response(JSON.stringify({ error: "Not found" }), {

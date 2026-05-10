@@ -2,6 +2,12 @@ import type { ScannerResponse, WeatherResponse } from "@/stores/app-store";
 
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
+export async function fetchRange(): Promise<{ start: string; end: string }> {
+	const res = await fetch(`${API_BASE}/range`);
+	if (!res.ok) throw new Error(`Range fetch failed: ${res.status}`);
+	return res.json();
+}
+
 export async function fetchWeather(
 	lat: number,
 	lng: number,

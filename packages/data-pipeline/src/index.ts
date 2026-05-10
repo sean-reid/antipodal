@@ -37,21 +37,34 @@ async function main() {
 	];
 
 	console.log(
-		`Fetching weather data for ${allLocations.length} locations (${startDate} to ${endDate})${resume ? " (resuming)" : ""}`,
+		`Fetching weather for ${allLocations.length} locations (${startDate} to ${endDate})${resume ? " (resuming)" : ""}`,
 	);
+	console.log("Batched requests keep us well under the 10K daily API limit.\n");
+
 	const rawData = await fetchAllWeather(allLocations, resume, startDate, endDate);
 
-	console.log("Transforming to monthly files");
+	console.log("Transforming to monthly files...");
 	const monthlyData = transformToMonthlyFiles(grid, rawData);
 
-	console.log("Writing output files");
+	console.log("Writing output files...");
 	await writeOutputFiles(grid, monthlyData);
 
 	const elapsed = ((Date.now() - startTime) / 1000 / 60).toFixed(1);
-	console.log(`Done in ${elapsed} minutes`);
+	console.log(`\nDone in ${elapsed} minutes.`);
 }
 
 main().catch((err) => {
+	if (err.name === "DailyLimitError") {
+		console.error(`\nABORTED: ${err.message}`);
+		console.error(
+			"The daily API limit has been reached. Wait until midnight UTC and run again with --resume.",
+		);
+		process.exit(2);
+	}
+	if (err.name === "BudgetExhaustedError") {
+		console.error(`\n${err.message}`);
+		process.exit(2);
+	}
 	console.error("Pipeline failed:", err);
 	process.exit(1);
 });

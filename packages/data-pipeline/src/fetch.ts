@@ -2,11 +2,12 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 const ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive";
-const DELAY_MS = 2000;
-const BACKOFF_BASE_MS = 30_000;
-const BACKOFF_MAX_MS = 180_000;
-const MAX_RETRIES = 5;
-const CHECKPOINT_INTERVAL = 25;
+
+const BATCH_SIZE = 10;
+const DELAY_BETWEEN_BATCHES_MS = 6_000;
+const DELAY_AFTER_MINUTELY_LIMIT_MS = 90_000;
+const REQUEST_BUDGET = 5_000;
+const CHECKPOINT_INTERVAL = 5;
 
 export interface DailyData {
 	time: string[];
@@ -15,8 +16,9 @@ export interface DailyData {
 }
 
 interface Checkpoint {
-	lastCompleted: number;
+	lastCompletedBatch: number;
 	data: Record<string, DailyData>;
+	requestCount: number;
 }
 
 const OUTPUT_DIR = join(process.cwd(), "output");
@@ -26,73 +28,177 @@ function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchWithRetry(
-	lat: number,
-	lng: number,
-	startDate: string,
-	endDate: string,
-): Promise<DailyData> {
-	const url = `${ARCHIVE_URL}?latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}&start_date=${startDate}&end_date=${endDate}&daily=temperature_2m_mean,pressure_msl_mean&timezone=UTC`;
-
-	for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-		const res = await fetch(url);
-
-		if (res.ok) {
-			const json = await res.json();
-			return json.daily as DailyData;
-		}
-
-		const status = res.status;
-		if (status === 429 || status >= 500) {
-			if (attempt === MAX_RETRIES) {
-				throw new Error(
-					`Failed after ${MAX_RETRIES} retries for (${lat.toFixed(4)}, ${lng.toFixed(4)}): HTTP ${status}`,
-				);
-			}
-			const body = await res.text().catch(() => "");
-			const backoff = Math.min(BACKOFF_BASE_MS * 2 ** attempt, BACKOFF_MAX_MS);
-			console.log(
-				`\nHTTP ${status}: ${body.slice(0, 200)}\nBacking off ${backoff / 1000}s (attempt ${attempt + 1}/${MAX_RETRIES})`,
-			);
-			await sleep(backoff);
-			continue;
-		}
-
-		throw new Error(
-			`Unexpected HTTP ${status} for (${lat.toFixed(4)}, ${lng.toFixed(4)}): ${await res.text()}`,
-		);
+class DailyLimitError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "DailyLimitError";
 	}
-
-	throw new Error("Unreachable");
 }
 
-async function saveCheckpoint(lastCompleted: number, data: Map<number, DailyData>): Promise<void> {
+class BudgetExhaustedError extends Error {
+	constructor(used: number, budget: number) {
+		super(
+			`Request budget exhausted: ${used}/${budget} used. Resume later with --resume to continue.`,
+		);
+		this.name = "BudgetExhaustedError";
+	}
+}
+
+async function preflight(): Promise<void> {
+	console.log("Pre-flight check: verifying API availability...");
+	const url = `${ARCHIVE_URL}?latitude=0&longitude=0&start_date=2020-01-01&end_date=2020-01-02&daily=temperature_2m_mean&timezone=UTC`;
+	const res = await fetch(url);
+	if (!res.ok) {
+		const body = await res.text().catch(() => "");
+		if (body.includes("Daily API request limit exceeded")) {
+			throw new DailyLimitError(
+				"Daily API limit already exhausted. Wait for reset (midnight UTC) and try again.",
+			);
+		}
+		throw new Error(`Pre-flight failed: HTTP ${res.status} - ${body.slice(0, 300)}`);
+	}
+	const json = await res.json();
+	if (json.error) {
+		throw new Error(`Pre-flight failed: ${json.reason || JSON.stringify(json)}`);
+	}
+	console.log("Pre-flight passed. API is available.\n");
+}
+
+function buildBatchUrl(
+	locations: Array<{ lat: number; lng: number }>,
+	startDate: string,
+	endDate: string,
+): string {
+	const lats = locations.map((l) => l.lat.toFixed(4)).join(",");
+	const lngs = locations.map((l) => l.lng.toFixed(4)).join(",");
+	return `${ARCHIVE_URL}?latitude=${lats}&longitude=${lngs}&start_date=${startDate}&end_date=${endDate}&daily=temperature_2m_mean,pressure_msl_mean&timezone=UTC`;
+}
+
+function parseErrorCategory(body: string): "daily" | "minutely" | "hourly" | "unknown" {
+	const lower = body.toLowerCase();
+	if (lower.includes("daily api request limit") || lower.includes("daily")) return "daily";
+	if (lower.includes("minutely") || lower.includes("per minute")) return "minutely";
+	if (lower.includes("hourly") || lower.includes("per hour")) return "hourly";
+	return "unknown";
+}
+
+async function fetchBatch(
+	locations: Array<{ lat: number; lng: number }>,
+	startDate: string,
+	endDate: string,
+): Promise<DailyData[]> {
+	const url = buildBatchUrl(locations, startDate, endDate);
+	const res = await fetch(url);
+
+	if (!res.ok) {
+		const body = await res.text().catch(() => "");
+		const category = parseErrorCategory(body);
+
+		if (res.status === 429 || category === "daily") {
+			if (category === "daily") {
+				throw new DailyLimitError(
+					`Daily API limit hit. ${body.slice(0, 200)}\nSave checkpoint and abort. Resume later with --resume.`,
+				);
+			}
+			if (category === "minutely" || category === "hourly") {
+				console.log(
+					`\nRate limited (${category}). Pausing ${DELAY_AFTER_MINUTELY_LIMIT_MS / 1000}s before retry...`,
+				);
+				await sleep(DELAY_AFTER_MINUTELY_LIMIT_MS);
+				const retry = await fetch(url);
+				if (!retry.ok) {
+					const retryBody = await retry.text().catch(() => "");
+					if (parseErrorCategory(retryBody) === "daily") {
+						throw new DailyLimitError(`Daily limit hit on retry. ${retryBody.slice(0, 200)}`);
+					}
+					throw new Error(
+						`Failed after rate-limit retry: HTTP ${retry.status} - ${retryBody.slice(0, 200)}`,
+					);
+				}
+				const retryJson = await retry.json();
+				return normalizeBatchResponse(retryJson, locations.length);
+			}
+			throw new DailyLimitError(
+				`Rate limited (unknown category). Aborting to be safe. ${body.slice(0, 200)}`,
+			);
+		}
+
+		if (res.status >= 500) {
+			console.log(`\nServer error (HTTP ${res.status}). Pausing 30s before retry...`);
+			await sleep(30_000);
+			const retry = await fetch(url);
+			if (!retry.ok) {
+				throw new Error(
+					`Server error persists: HTTP ${retry.status} - ${await retry.text().catch(() => "")}`,
+				);
+			}
+			const retryJson = await retry.json();
+			return normalizeBatchResponse(retryJson, locations.length);
+		}
+
+		throw new Error(`HTTP ${res.status}: ${body.slice(0, 300)}`);
+	}
+
+	const json = await res.json();
+	if (json.error) {
+		const reason = json.reason || "";
+		if (reason.toLowerCase().includes("daily")) {
+			throw new DailyLimitError(reason);
+		}
+		throw new Error(`API error: ${reason}`);
+	}
+
+	return normalizeBatchResponse(json, locations.length);
+}
+
+// biome-ignore lint/suspicious/noExplicitAny: untyped API response
+function normalizeBatchResponse(json: any, expectedCount: number): DailyData[] {
+	if (Array.isArray(json)) {
+		// biome-ignore lint/suspicious/noExplicitAny: untyped API response items
+		return json.map((item: any) => item.daily as DailyData);
+	}
+	if (json.daily) {
+		return [json.daily as DailyData];
+	}
+	throw new Error(
+		`Unexpected response shape (expected ${expectedCount} results): ${JSON.stringify(json).slice(0, 500)}`,
+	);
+}
+
+async function saveCheckpoint(
+	lastCompletedBatch: number,
+	data: Map<number, DailyData>,
+	requestCount: number,
+): Promise<void> {
 	await mkdir(OUTPUT_DIR, { recursive: true });
 	const serializable: Checkpoint = {
-		lastCompleted,
+		lastCompletedBatch,
 		data: Object.fromEntries(data),
+		requestCount,
 	};
 	await writeFile(CHECKPOINT_PATH, JSON.stringify(serializable));
 }
 
 async function loadCheckpoint(): Promise<{
-	lastCompleted: number;
+	lastCompletedBatch: number;
 	data: Map<number, DailyData>;
+	requestCount: number;
 } | null> {
 	try {
 		const raw = await readFile(CHECKPOINT_PATH, "utf-8");
 		const parsed: Checkpoint = JSON.parse(raw);
 		return {
-			lastCompleted: parsed.lastCompleted,
+			lastCompletedBatch: parsed.lastCompletedBatch,
 			data: new Map(Object.entries(parsed.data).map(([k, v]) => [Number(k), v])),
+			requestCount: parsed.requestCount || 0,
 		};
 	} catch {
 		return null;
 	}
 }
 
-function formatEta(remainingLocations: number, msPerLocation: number): string {
-	const totalMs = remainingLocations * msPerLocation;
+function formatEta(remainingBatches: number, msPerBatch: number): string {
+	const totalMs = remainingBatches * msPerBatch;
 	const minutes = Math.ceil(totalMs / 60_000);
 	if (minutes < 60) return `${minutes}m`;
 	const hours = Math.floor(minutes / 60);
@@ -106,56 +212,92 @@ export async function fetchAllWeather(
 	startDate = "1940-01-01",
 	endDate = "2024-12-31",
 ): Promise<Map<number, DailyData>> {
+	await preflight();
+
 	let data = new Map<number, DailyData>();
-	let startIndex = 0;
+	let startBatch = 0;
+	let requestCount = 1; // preflight counts as 1
 
 	if (resumeFrom) {
 		const checkpoint = await loadCheckpoint();
 		if (checkpoint) {
 			data = checkpoint.data;
-			startIndex = checkpoint.lastCompleted + 1;
+			startBatch = checkpoint.lastCompletedBatch + 1;
+			requestCount = checkpoint.requestCount;
 			console.log(
-				`Resuming from checkpoint: ${data.size} locations already fetched, starting at index ${startIndex}`,
+				`Resuming from checkpoint: ${data.size} locations fetched, ${requestCount} API calls used, starting at batch ${startBatch}`,
 			);
 		} else {
 			console.log("No checkpoint found, starting from scratch");
 		}
 	}
 
-	const total = locations.length;
+	const batches: Array<{ indices: number[]; locs: Array<{ lat: number; lng: number }> }> = [];
+	for (let i = 0; i < locations.length; i += BATCH_SIZE) {
+		const end = Math.min(i + BATCH_SIZE, locations.length);
+		const indices = Array.from({ length: end - i }, (_, k) => i + k);
+		const locs = indices.map((idx) => locations[idx]);
+		batches.push({ indices, locs });
+	}
+
+	const totalBatches = batches.length;
+	const totalLocations = locations.length;
 	let completedSinceResume = 0;
 	const fetchStartTime = Date.now();
 
-	for (let i = startIndex; i < total; i++) {
-		const loc = locations[i];
-		const msPerLocation =
-			completedSinceResume > 0
-				? (Date.now() - fetchStartTime) / completedSinceResume
-				: DELAY_MS + 5000;
-		const remaining = total - i;
-		const eta = formatEta(remaining, msPerLocation);
+	console.log(
+		`${totalLocations} locations in ${totalBatches} batches of ${BATCH_SIZE}. Budget: ${REQUEST_BUDGET} requests.`,
+	);
+	console.log(
+		`Delay between batches: ${DELAY_BETWEEN_BATCHES_MS / 1000}s. Estimated time: ${formatEta(totalBatches - startBatch, DELAY_BETWEEN_BATCHES_MS + 3000)}\n`,
+	);
 
-		process.stdout.write(
-			`\rFetching location ${i + 1}/${total} (${loc.lat.toFixed(2)}, ${loc.lng.toFixed(2)}) ... ETA: ${eta}   `,
-		);
-
-		const daily = await fetchWithRetry(loc.lat, loc.lng, startDate, endDate);
-		data.set(i, daily);
-		completedSinceResume++;
-
-		if (completedSinceResume % CHECKPOINT_INTERVAL === 0) {
-			await saveCheckpoint(i, data);
-			process.stdout.write(" [checkpoint saved]");
+	for (let b = startBatch; b < totalBatches; b++) {
+		if (requestCount >= REQUEST_BUDGET) {
+			await saveCheckpoint(b - 1, data, requestCount);
+			throw new BudgetExhaustedError(requestCount, REQUEST_BUDGET);
 		}
 
-		if (i < total - 1) {
-			await sleep(DELAY_MS);
+		const batch = batches[b];
+		const msPerBatch =
+			completedSinceResume > 0
+				? (Date.now() - fetchStartTime) / completedSinceResume
+				: DELAY_BETWEEN_BATCHES_MS + 3000;
+		const remaining = totalBatches - b;
+		const eta = formatEta(remaining, msPerBatch);
+
+		process.stdout.write(
+			`\rBatch ${b + 1}/${totalBatches} (${batch.locs.length} locs) | ${data.size}/${totalLocations} done | ${requestCount}/${REQUEST_BUDGET} API calls | ETA: ${eta}   `,
+		);
+
+		try {
+			const results = await fetchBatch(batch.locs, startDate, endDate);
+			requestCount++;
+
+			for (let j = 0; j < results.length; j++) {
+				data.set(batch.indices[j], results[j]);
+			}
+
+			completedSinceResume++;
+
+			if (completedSinceResume % CHECKPOINT_INTERVAL === 0) {
+				await saveCheckpoint(b, data, requestCount);
+				process.stdout.write(" [saved]");
+			}
+		} catch (err) {
+			await saveCheckpoint(b > 0 ? b - 1 : 0, data, requestCount);
+			console.log(`\n\nCheckpoint saved at batch ${b}. Resume with --resume.`);
+			throw err;
+		}
+
+		if (b < totalBatches - 1) {
+			await sleep(DELAY_BETWEEN_BATCHES_MS);
 		}
 	}
 
-	process.stdout.write("\n");
-	console.log(`Fetched ${data.size} locations total`);
+	process.stdout.write("\n\n");
+	console.log(`Fetched all ${data.size} locations in ${requestCount} API calls.`);
 
-	await saveCheckpoint(total - 1, data);
+	await saveCheckpoint(totalBatches - 1, data, requestCount);
 	return data;
 }

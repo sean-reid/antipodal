@@ -49,12 +49,13 @@ async function fetchWithRetry(
           `Failed after ${MAX_RETRIES} retries for (${lat.toFixed(4)}, ${lng.toFixed(4)}): HTTP ${status}`,
         );
       }
+      const body = await res.text().catch(() => "");
       const backoff = Math.min(
         BACKOFF_BASE_MS * Math.pow(2, attempt),
         BACKOFF_MAX_MS,
       );
       console.log(
-        `\nHTTP ${status}, backing off ${backoff / 1000}s (attempt ${attempt + 1}/${MAX_RETRIES})`,
+        `\nHTTP ${status}: ${body.slice(0, 200)}\nBacking off ${backoff / 1000}s (attempt ${attempt + 1}/${MAX_RETRIES})`,
       );
       await sleep(backoff);
       continue;

@@ -24,8 +24,3 @@ export async function fetchScanner(date: string): Promise<ScannerResponse> {
 	return res.json();
 }
 
-export async function fetchRange(): Promise<{ start: string; end: string }> {
-	const res = await fetch(`${API_BASE}/range`);
-	if (!res.ok) throw new Error(`Range fetch failed: ${res.status}`);
-	return res.json();
-}

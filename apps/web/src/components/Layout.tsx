@@ -1,4 +1,4 @@
-import { Globe } from "./Globe";
+import { lazy, Suspense } from "react";
 import { TimeSlider } from "./TimeSlider";
 import { ComparisonView } from "./ComparisonView";
 import { SearchBar } from "./SearchBar";
@@ -6,6 +6,8 @@ import { Scanner } from "./Scanner";
 import { EducationPanel } from "./EducationPanel";
 import { useWeather } from "@/hooks/useWeather";
 import { useAppStore } from "@/stores/app-store";
+
+const Globe = lazy(() => import("./Globe"));
 
 export function Layout() {
 	useWeather();
@@ -35,7 +37,7 @@ export function Layout() {
 					</div>
 					<button
 						onClick={toggleEducation}
-						className="pointer-events-auto flex items-center justify-center h-8 w-8 rounded-full border border-navy-700 bg-navy-900/80 backdrop-blur-sm text-slate-400 hover:text-amber-500 hover:border-amber-500/50 transition-colors"
+						className="pointer-events-auto flex items-center justify-center h-11 w-11 rounded-full border border-navy-700 bg-navy-900/80 backdrop-blur-sm text-slate-400 hover:text-amber-500 hover:border-amber-500/50 transition-colors"
 						aria-label="Learn about the Borsuk-Ulam theorem"
 					>
 						<svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -56,7 +58,15 @@ export function Layout() {
 			)}
 
 			<main className="h-full w-full">
-				<Globe />
+				<Suspense
+					fallback={
+						<div className="flex h-full w-full items-center justify-center bg-navy-950">
+							<div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-400 border-t-amber-500" />
+						</div>
+					}
+				>
+					<Globe />
+				</Suspense>
 			</main>
 
 			{selectedPoint && antipodalPoint && (
@@ -91,7 +101,7 @@ export function Layout() {
 			)}
 
 			{error && (
-				<div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 bg-red-900/80 text-red-200 text-sm px-4 py-2 rounded-lg">
+				<div role="alert" className="absolute top-16 left-1/2 -translate-x-1/2 z-30 bg-red-900/80 text-red-200 text-sm px-4 py-2 rounded-lg">
 					{error}
 				</div>
 			)}

@@ -13,22 +13,13 @@ export interface WeatherResponse {
 	delta: { temp: number; pressure: number };
 }
 
-export interface ScannerPoint {
-	lat: number;
-	lng: number;
-	antiLat: number;
-	antiLng: number;
-	tempDelta: number;
-	pressureDelta: number;
-	combinedDelta: number;
-}
-
 export interface ScannerResponse {
-	points: ScannerPoint[];
 	closest: {
 		index: number;
 		lat: number;
 		lng: number;
+		antiLat: number;
+		antiLng: number;
 		tempDelta: number;
 		pressureDelta: number;
 	};
@@ -92,6 +83,6 @@ export const useAppStore = create<AppState>((set) => ({
 	reset: () => set(initialState),
 }));
 
-if (typeof window !== "undefined") {
+if (typeof window !== "undefined" && import.meta.env.DEV) {
 	(window as any).__ZUSTAND_STORE__ = useAppStore;
 }

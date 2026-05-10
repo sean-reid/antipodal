@@ -44,47 +44,32 @@ export async function handleScanner(request: Request, env: Env): Promise<Respons
   let closestIndex = 0;
   let smallestCombined = Infinity;
 
-  const points = grid.map((gridPoint, i) => {
+  for (let i = 0; i < grid.length; i++) {
     const entry = dayData[i];
-    const hasNull =
-      entry.t1 === null || entry.p1 === null ||
-      entry.t2 === null || entry.p2 === null;
+    if (entry.t1 === null || entry.p1 === null || entry.t2 === null || entry.p2 === null) continue;
 
-    const tempDelta = hasNull ? 0 : Math.round(((entry.t1 as number) - (entry.t2 as number)) * 100) / 100;
-    const pressureDelta = hasNull ? 0 : Math.round(((entry.p1 as number) - (entry.p2 as number)) * 100) / 100;
-    const combined = hasNull ? Infinity : Math.abs(tempDelta) + Math.abs(pressureDelta);
+    const tempDelta = Math.abs((entry.t1 as number) - (entry.t2 as number));
+    const pressureDelta = Math.abs((entry.p1 as number) - (entry.p2 as number));
+    const combined = tempDelta + pressureDelta;
 
     if (combined < smallestCombined) {
       smallestCombined = combined;
       closestIndex = i;
     }
+  }
 
-    return {
-      lat: gridPoint.lat,
-      lng: gridPoint.lng,
-      antiLat: gridPoint.antiLat,
-      antiLng: gridPoint.antiLng,
-      temp: entry.t1,
-      pressure: entry.p1,
-      antiTemp: entry.t2,
-      antiPressure: entry.p2,
-      tempDelta,
-      pressureDelta,
-    };
-  });
-
-  const closest = points[closestIndex];
+  const closestGrid = grid[closestIndex];
+  const closestEntry = dayData[closestIndex];
 
   return jsonResponse({
-    points,
     closest: {
       index: closestIndex,
-      lat: closest.lat,
-      lng: closest.lng,
-      antiLat: closest.antiLat,
-      antiLng: closest.antiLng,
-      tempDelta: closest.tempDelta,
-      pressureDelta: closest.pressureDelta,
+      lat: closestGrid.lat,
+      lng: closestGrid.lng,
+      antiLat: closestGrid.antiLat,
+      antiLng: closestGrid.antiLng,
+      tempDelta: Math.round(((closestEntry.t1 as number) - (closestEntry.t2 as number)) * 100) / 100,
+      pressureDelta: Math.round(((closestEntry.p1 as number) - (closestEntry.p2 as number)) * 100) / 100,
     },
   });
 }

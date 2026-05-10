@@ -34,14 +34,14 @@ export function Scanner() {
 								setSelectedPoint(scannerData.closest.lat, scannerData.closest.lng);
 							}
 						}}
-						className="text-xs text-amber-500 hover:text-amber-400 transition-colors cursor-pointer"
+						className="text-sm py-1.5 text-amber-500 hover:text-amber-400 transition-colors cursor-pointer"
 					>
 						Go to this pair
 					</button>
 					<button
 						type="button"
 						onClick={handleFindAndGo}
-						className="text-xs text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+						className="text-sm py-1.5 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
 					>
 						Scan again
 					</button>
@@ -63,9 +63,9 @@ export function Scanner() {
 				type="button"
 				onClick={handleFindAndGo}
 				disabled={isScanning}
-				className="text-xs text-left text-amber-500 hover:text-amber-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+				className="text-sm text-left py-1.5 text-amber-500 hover:text-amber-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
 			>
-				{isScanning ? "Scanning 500 points..." : "Find the closest matching pair"}
+				{isScanning ? "Scanning grid..." : "Find the closest matching pair"}
 			</button>
 		</div>
 	);

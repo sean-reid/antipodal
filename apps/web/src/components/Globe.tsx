@@ -46,7 +46,7 @@ function clearRingChildren(scene: any) {
 	});
 }
 
-export function Globe() {
+export default function Globe() {
 	const globeRef = useRef<any>(null);
 	const selectedPoint = useAppStore((s) => s.selectedPoint);
 	const antipodalPoint = useAppStore((s) => s.antipodalPoint);

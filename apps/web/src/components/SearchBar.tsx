@@ -47,7 +47,8 @@ export function SearchBar() {
 					onBlur={handleBlur}
 					onFocus={handleFocus}
 					placeholder="Search city..."
-					className="w-full rounded-lg border border-navy-700 bg-navy-800 py-1.5 pl-9 pr-3 text-sm text-slate-200 placeholder:text-slate-400 outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30 transition-colors"
+					aria-label="Search for a city"
+					className="w-full rounded-lg border border-navy-700 bg-navy-800 py-2.5 pl-9 pr-3 text-sm text-slate-200 placeholder:text-slate-400 outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30 transition-colors"
 				/>
 				{isSearching && (
 					<div className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin rounded-full border-2 border-slate-400 border-t-amber-500" />
@@ -69,7 +70,7 @@ export function SearchBar() {
 									type="button"
 									onMouseDown={(e) => e.preventDefault()}
 									onClick={() => handleSelect(r.latitude, r.longitude)}
-									className="w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-navy-800 transition-colors cursor-pointer"
+									className="w-full text-left px-3 py-3 text-sm text-slate-200 hover:bg-navy-800 transition-colors cursor-pointer"
 								>
 									<span className="font-medium">{r.name}</span>
 									<span className="text-slate-400">

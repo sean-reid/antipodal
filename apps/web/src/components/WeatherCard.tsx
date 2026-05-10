@@ -11,10 +11,11 @@ export function WeatherCard({ label, lat, lng, temp, pressure, accentColor }: We
 	return (
 		<div className="flex flex-col gap-3">
 			<div className="flex items-center gap-2">
-				<span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: accentColor }} />
-				<span className="text-xs font-medium uppercase tracking-wider text-slate-400">
-					{label}
-				</span>
+				<span
+					className="inline-block h-2.5 w-2.5 rounded-full"
+					style={{ backgroundColor: accentColor }}
+				/>
+				<span className="text-xs font-medium uppercase tracking-wider text-slate-400">{label}</span>
 			</div>
 
 			<p className="text-xs text-slate-400 tabular-nums">

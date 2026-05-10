@@ -1,18 +1,15 @@
-import { useCallback, useMemo } from "react";
 import { useAppStore } from "@/stores/app-store";
+import { useCallback, useMemo } from "react";
 
 const START = new Date("1940-01-01T00:00:00Z").getTime();
 const END = new Date("2024-12-31T00:00:00Z").getTime();
 const MS_PER_DAY = 86_400_000;
 const MAX_INDEX = Math.round((END - START) / MS_PER_DAY);
 
-const MONTHS = [
-	"Jan", "Feb", "Mar", "Apr", "May", "Jun",
-	"Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function dateToIndex(dateStr: string): number {
-	const ms = new Date(dateStr + "T00:00:00Z").getTime();
+	const ms = new Date(`${dateStr}T00:00:00Z`).getTime();
 	return Math.round((ms - START) / MS_PER_DAY);
 }
 
@@ -32,14 +29,14 @@ export function TimeSlider() {
 
 	const displayDate = useMemo(() => {
 		const year = selectedDate.slice(0, 4);
-		const monthIdx = parseInt(selectedDate.slice(5, 7)) - 1;
-		const day = parseInt(selectedDate.slice(8, 10));
+		const monthIdx = Number.parseInt(selectedDate.slice(5, 7)) - 1;
+		const day = Number.parseInt(selectedDate.slice(8, 10));
 		return `${MONTHS[monthIdx]} ${day}, ${year}`;
 	}, [selectedDate]);
 
 	const handleChange = useCallback(
 		(e: React.ChangeEvent<HTMLInputElement>) => {
-			const idx = parseInt(e.target.value);
+			const idx = Number.parseInt(e.target.value);
 			setSelectedDate(indexToDate(idx));
 		},
 		[setSelectedDate],
@@ -47,9 +44,7 @@ export function TimeSlider() {
 
 	return (
 		<div className="flex flex-col items-center gap-2">
-			<span className="text-sm font-medium text-slate-200 tabular-nums">
-				{displayDate}
-			</span>
+			<span className="text-sm font-medium text-slate-200 tabular-nums">{displayDate}</span>
 			<input
 				type="range"
 				min={0}

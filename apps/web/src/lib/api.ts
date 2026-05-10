@@ -1,4 +1,4 @@
-import type { WeatherResponse, ScannerResponse } from "@/stores/app-store";
+import type { ScannerResponse, WeatherResponse } from "@/stores/app-store";
 
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
@@ -23,4 +23,3 @@ export async function fetchScanner(date: string): Promise<ScannerResponse> {
 	if (!res.ok) throw new Error(`Scanner fetch failed: ${res.status}`);
 	return res.json();
 }
-

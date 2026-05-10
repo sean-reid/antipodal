@@ -1,6 +1,6 @@
-import { useEffect } from "react";
-import { useAppStore } from "@/stores/app-store";
 import { fetchWeather } from "@/lib/api";
+import { useAppStore } from "@/stores/app-store";
+import { useEffect } from "react";
 
 export function useWeather() {
 	const selectedPoint = useAppStore((s) => s.selectedPoint);

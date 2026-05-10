@@ -1,7 +1,7 @@
-import { useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { useGeocode } from "@/hooks/useGeocode";
 import { useAppStore } from "@/stores/app-store";
+import { AnimatePresence, motion } from "framer-motion";
+import { useRef } from "react";
 
 export function SearchBar() {
 	const { query, setQuery, results, isSearching } = useGeocode();
@@ -32,6 +32,7 @@ export function SearchBar() {
 					className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none"
 					viewBox="0 0 20 20"
 					fill="currentColor"
+					aria-hidden="true"
 				>
 					<path
 						fillRule="evenodd"

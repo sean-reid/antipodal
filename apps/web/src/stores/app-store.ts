@@ -73,8 +73,7 @@ export const useAppStore = create<AppState>((set) => ({
 
 	setScannerData: (data) => set({ scannerData: data }),
 
-	toggleEducation: () =>
-		set((state) => ({ isEducationOpen: !state.isEducationOpen })),
+	toggleEducation: () => set((state) => ({ isEducationOpen: !state.isEducationOpen })),
 
 	setLoading: (loading) => set({ isLoading: loading }),
 
@@ -84,5 +83,6 @@ export const useAppStore = create<AppState>((set) => ({
 }));
 
 if (typeof window !== "undefined" && import.meta.env.DEV) {
+	// biome-ignore lint/suspicious/noExplicitAny: dev-only debug helper
 	(window as any).__ZUSTAND_STORE__ = useAppStore;
 }

@@ -1,11 +1,11 @@
-import { lazy, Suspense } from "react";
-import { TimeSlider } from "./TimeSlider";
-import { ComparisonView } from "./ComparisonView";
-import { SearchBar } from "./SearchBar";
-import { Scanner } from "./Scanner";
-import { EducationPanel } from "./EducationPanel";
 import { useWeather } from "@/hooks/useWeather";
 import { useAppStore } from "@/stores/app-store";
+import { Suspense, lazy } from "react";
+import { ComparisonView } from "./ComparisonView";
+import { EducationPanel } from "./EducationPanel";
+import { Scanner } from "./Scanner";
+import { SearchBar } from "./SearchBar";
+import { TimeSlider } from "./TimeSlider";
 
 const Globe = lazy(() => import("./Globe"));
 
@@ -36,13 +36,19 @@ export function Layout() {
 						</div>
 					</div>
 					<button
+						type="button"
 						onClick={toggleEducation}
 						className="pointer-events-auto flex items-center justify-center h-11 w-11 rounded-full border border-navy-700 bg-navy-900/80 backdrop-blur-sm text-slate-400 hover:text-amber-500 hover:border-amber-500/50 transition-colors"
 						aria-label="Learn about the Borsuk-Ulam theorem"
 					>
-						<svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+						<svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
 							<circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.5" />
-							<path d="M5.5 5.5a1.5 1.5 0 1 1 2.12 1.37c-.42.24-.62.5-.62.88V8.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+							<path
+								d="M5.5 5.5a1.5 1.5 0 1 1 2.12 1.37c-.42.24-.62.5-.62.88V8.5"
+								stroke="currentColor"
+								strokeWidth="1.2"
+								strokeLinecap="round"
+							/>
 							<circle cx="7" cy="10.25" r="0.75" fill="currentColor" />
 						</svg>
 					</button>
@@ -70,38 +76,30 @@ export function Layout() {
 			</main>
 
 			{selectedPoint && antipodalPoint && (
-				<div className="absolute bottom-28 sm:bottom-24 left-1/2 -translate-x-1/2 z-10 flex gap-4 sm:gap-6 text-xs text-slate-400">
-					<div className="flex items-center gap-1.5">
-						<span className="inline-block h-2 w-2 rounded-full bg-amber-500" />
-						<span className="tabular-nums">
-							{selectedPoint.lat.toFixed(2)}, {selectedPoint.lng.toFixed(2)}
-						</span>
-					</div>
-					<div className="flex items-center gap-1.5">
-						<span className="inline-block h-2 w-2 rounded-full bg-teal-500" />
-						<span className="tabular-nums">
-							{antipodalPoint.lat.toFixed(2)}, {antipodalPoint.lng.toFixed(2)}
-						</span>
-					</div>
-				</div>
-			)}
-
-			{weatherData && (
-				<aside className="
+				<aside
+					className="
 					absolute z-20
 					bottom-20 left-2 right-2
 					sm:bottom-auto sm:top-16 sm:right-4 sm:left-auto sm:w-80
 					bg-navy-900/95 backdrop-blur-sm rounded-xl border border-navy-700 p-4 sm:p-5
 					max-h-[40vh] sm:max-h-[calc(100vh-8rem)] overflow-y-auto
-				">
+				"
+				>
 					<ComparisonView />
-					<div className="h-px bg-navy-700 my-4" />
-					<Scanner />
+					{weatherData && (
+						<>
+							<div className="h-px bg-navy-700 my-4" />
+							<Scanner />
+						</>
+					)}
 				</aside>
 			)}
 
 			{error && (
-				<div role="alert" className="absolute top-16 left-1/2 -translate-x-1/2 z-30 bg-red-900/80 text-red-200 text-sm px-4 py-2 rounded-lg">
+				<div
+					role="alert"
+					className="absolute top-16 left-1/2 -translate-x-1/2 z-30 bg-red-900/80 text-red-200 text-sm px-4 py-2 rounded-lg"
+				>
 					{error}
 				</div>
 			)}

@@ -1,6 +1,6 @@
+import { useAppStore } from "@/stores/app-store";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import GlobeGL from "react-globe.gl";
-import { useAppStore } from "@/stores/app-store";
 
 const GLOBE_IMAGE = "/earth-blue-marble.jpg";
 
@@ -24,6 +24,7 @@ interface RingData {
 	repeatPeriod: number;
 }
 
+// biome-ignore lint/suspicious/noExplicitAny: react-globe.gl ring accessor has no exported type
 const ringColorAccessor = (d: any) => {
 	const c = d.color;
 	return (t: number) => {
@@ -33,7 +34,9 @@ const ringColorAccessor = (d: any) => {
 	};
 };
 
+// biome-ignore lint/suspicious/noExplicitAny: three-globe internal scene objects have no exported types
 function clearRingChildren(scene: any) {
+	// biome-ignore lint/suspicious/noExplicitAny: three-globe internal
 	scene.traverse((obj: any) => {
 		if (obj.__globeObjType === "ring" && obj.children.length > 0) {
 			while (obj.children.length > 0) {
@@ -47,6 +50,7 @@ function clearRingChildren(scene: any) {
 }
 
 export default function Globe() {
+	// biome-ignore lint/suspicious/noExplicitAny: react-globe.gl ref has no exported type
 	const globeRef = useRef<any>(null);
 	const selectedPoint = useAppStore((s) => s.selectedPoint);
 	const antipodalPoint = useAppStore((s) => s.antipodalPoint);
@@ -54,10 +58,7 @@ export default function Globe() {
 
 	const handleGlobeClick = useCallback(
 		({ lat, lng }: { lat: number; lng: number }) => {
-			setSelectedPoint(
-				Math.round(lat * 100) / 100,
-				Math.round(lng * 100) / 100,
-			);
+			setSelectedPoint(Math.round(lat * 100) / 100, Math.round(lng * 100) / 100);
 		},
 		[setSelectedPoint],
 	);
@@ -81,6 +82,7 @@ export default function Globe() {
 		);
 	}, [selectedPoint]);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: clearRingChildren is stable
 	useEffect(() => {
 		const globe = globeRef.current;
 		if (!globe) return;

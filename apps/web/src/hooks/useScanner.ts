@@ -1,7 +1,7 @@
-import { useState, useCallback } from "react";
+import { fetchScanner } from "@/lib/api";
 import { useAppStore } from "@/stores/app-store";
 import type { ScannerResponse } from "@/stores/app-store";
-import { fetchScanner } from "@/lib/api";
+import { useCallback, useState } from "react";
 
 export function useScanner() {
 	const [isScanning, setIsScanning] = useState(false);

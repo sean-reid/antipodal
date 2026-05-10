@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 test("initial state with instructions", async ({ page }) => {
 	await page.goto("/");
@@ -11,6 +11,7 @@ test("weather comparison after point selection", async ({ page }) => {
 	await page.waitForTimeout(2000);
 
 	await page.evaluate(() => {
+		// biome-ignore lint/suspicious/noExplicitAny: dev-only store access
 		const store = (window as any).__ZUSTAND_STORE__;
 		if (store) store.getState().setSelectedPoint(40.71, -74.01);
 	});
@@ -24,6 +25,7 @@ test("education panel", async ({ page }) => {
 	await page.waitForTimeout(2000);
 
 	await page.evaluate(() => {
+		// biome-ignore lint/suspicious/noExplicitAny: dev-only store access
 		const store = (window as any).__ZUSTAND_STORE__;
 		if (store) store.getState().toggleEducation();
 	});
@@ -38,6 +40,7 @@ test("mobile weather and education", async ({ page }) => {
 	await page.waitForTimeout(2000);
 
 	await page.evaluate(() => {
+		// biome-ignore lint/suspicious/noExplicitAny: dev-only store access
 		const store = (window as any).__ZUSTAND_STORE__;
 		if (store) store.getState().setSelectedPoint(35.68, 139.69);
 	});
@@ -46,6 +49,7 @@ test("mobile weather and education", async ({ page }) => {
 	await page.screenshot({ path: "test-results/04-mobile-weather.png", fullPage: true });
 
 	await page.evaluate(() => {
+		// biome-ignore lint/suspicious/noExplicitAny: dev-only store access
 		const store = (window as any).__ZUSTAND_STORE__;
 		if (store) store.getState().toggleEducation();
 	});

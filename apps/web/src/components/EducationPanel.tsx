@@ -115,9 +115,10 @@ function PanelContent({ onClose }: { onClose: () => void }) {
 						guarantees a pair of opposite points where both values match.
 					</p>
 					<p className="font-serif text-slate-200 leading-relaxed mt-3">
-						The proof uses algebraic topology. If no such pair existed, you could construct an odd
-						continuous map from the 2-sphere to the circle. But such a map cannot exist, as it would
-						contradict the structure of the sphere's fundamental group under the antipodal action.
+						Borsuk's proof works by contradiction. If no such pair existed, you could normalize the
+						difference to build a continuous antipodal map from the 2-sphere to the circle. But
+						Borsuk showed that every antipodal map is essential (not contractible to a point), while
+						any map from a sphere to a lower-dimensional sphere must be inessential. Contradiction.
 					</p>
 				</section>
 
@@ -188,8 +189,19 @@ function PanelContent({ onClose }: { onClose: () => void }) {
 										.
 									</p>
 									<p className="font-serif text-slate-400 text-sm leading-relaxed">
-										First proved by Karol Borsuk in 1933, though Stanislaw Ulam conjectured it
-										earlier.
+										First proved by Karol Borsuk in 1933 as Satz II of{" "}
+										<a
+											href="https://doi.org/10.4064/fm-20-1-177-190"
+											target="_blank"
+											rel="noopener noreferrer"
+											className="text-amber-500/70 hover:text-amber-500 underline underline-offset-2 transition-colors"
+										>
+											&ldquo;Drei S&auml;tze &uuml;ber die <span className="italic">n</span>
+											-dimensionale euklidische Sph&auml;re&rdquo;
+										</a>
+										, <span className="italic">Fundamenta Mathematicae</span>{" "}
+										<span className="font-medium">20</span>, 177&ndash;190. The conjecture is
+										attributed to Stanis&lstrok;aw Ulam in the paper's footnote 7.
 									</p>
 								</div>
 							</motion.div>

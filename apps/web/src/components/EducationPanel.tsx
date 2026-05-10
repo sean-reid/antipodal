@@ -237,7 +237,7 @@ export function EducationPanel() {
 							${
 								isMobile
 									? "inset-x-0 bottom-0 top-0 rounded-t-2xl border-t border-navy-700"
-									: "inset-y-0 left-0 w-[400px] border-r border-navy-700"
+									: "inset-y-0 left-0 w-[440px] border-r border-navy-700"
 							}
 						`}
 						initial={isMobile ? { y: "100%" } : { x: "-100%" }}

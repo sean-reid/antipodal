@@ -5,9 +5,9 @@ const DEFAULT_BASE_URL = "https://archive-api.open-meteo.com";
 
 const REMOTE_BATCH_SIZE = 10;
 const LOCAL_BATCH_SIZE = 50;
+const LOCAL_CONCURRENCY = 8;
 
 const REMOTE_DELAY_MS = 6_000;
-const LOCAL_DELAY_MS = 100;
 
 const REMOTE_BUDGET = 5_000;
 
@@ -238,17 +238,79 @@ export async function fetchAllWeather(
 	const local = isLocal(baseUrl);
 	const archiveUrl = `${baseUrl}/v1/archive`;
 	const batchSize = local ? LOCAL_BATCH_SIZE : REMOTE_BATCH_SIZE;
-	const delayMs = local ? LOCAL_DELAY_MS : REMOTE_DELAY_MS;
-	const budget = local ? Number.POSITIVE_INFINITY : REMOTE_BUDGET;
 
 	console.log(`Mode: ${local ? "local (no rate limits)" : "remote (rate-limited)"}`);
 	console.log(`API: ${baseUrl}`);
-	console.log(
-		`Batch size: ${batchSize}, delay: ${delayMs}ms, budget: ${local ? "unlimited" : budget}\n`,
-	);
 
 	await healthCheck(archiveUrl);
 
+	const batches: Array<{ indices: number[]; locs: Array<{ lat: number; lng: number }> }> = [];
+	for (let i = 0; i < locations.length; i += batchSize) {
+		const end = Math.min(i + batchSize, locations.length);
+		const indices = Array.from({ length: end - i }, (_, k) => i + k);
+		const locs = indices.map((idx) => locations[idx]);
+		batches.push({ indices, locs });
+	}
+
+	if (local) {
+		return fetchLocal(archiveUrl, batches, locations.length, startDate, endDate);
+	}
+	return fetchRemote(archiveUrl, batches, locations.length, startDate, endDate, resumeFrom);
+}
+
+type Batch = { indices: number[]; locs: Array<{ lat: number; lng: number }> };
+
+async function fetchLocal(
+	archiveUrl: string,
+	batches: Batch[],
+	totalLocations: number,
+	startDate: string,
+	endDate: string,
+): Promise<Map<number, DailyData>> {
+	const data = new Map<number, DailyData>();
+	const total = batches.length;
+	let completed = 0;
+	const startTime = Date.now();
+
+	console.log(
+		`${totalLocations} locations in ${total} batches of ${LOCAL_BATCH_SIZE}, ${LOCAL_CONCURRENCY} concurrent\n`,
+	);
+
+	for (let i = 0; i < total; i += LOCAL_CONCURRENCY) {
+		const chunk = batches.slice(i, i + LOCAL_CONCURRENCY);
+		const results = await Promise.all(
+			chunk.map((batch) => fetchBatch(archiveUrl, batch.locs, startDate, endDate)),
+		);
+
+		for (let c = 0; c < chunk.length; c++) {
+			for (let j = 0; j < results[c].length; j++) {
+				data.set(chunk[c].indices[j], results[c][j]);
+			}
+			completed++;
+		}
+
+		const elapsed = (Date.now() - startTime) / 1000;
+		const rate = completed / elapsed;
+		const remaining = Math.ceil((total - completed) / rate);
+		process.stdout.write(
+			`\rBatch ${completed}/${total} | ${data.size}/${totalLocations} locs | ${elapsed.toFixed(0)}s elapsed | ~${remaining}s left   `,
+		);
+	}
+
+	process.stdout.write("\n\n");
+	const totalSeconds = ((Date.now() - startTime) / 1000).toFixed(0);
+	console.log(`Fetched all ${data.size} locations in ${completed} requests, ${totalSeconds}s.`);
+	return data;
+}
+
+async function fetchRemote(
+	archiveUrl: string,
+	batches: Batch[],
+	totalLocations: number,
+	startDate: string,
+	endDate: string,
+	resumeFrom?: boolean,
+): Promise<Map<number, DailyData>> {
 	let data = new Map<number, DailyData>();
 	let startBatch = 0;
 	let requestCount = 1;
@@ -267,42 +329,33 @@ export async function fetchAllWeather(
 		}
 	}
 
-	const batches: Array<{ indices: number[]; locs: Array<{ lat: number; lng: number }> }> = [];
-	for (let i = 0; i < locations.length; i += batchSize) {
-		const end = Math.min(i + batchSize, locations.length);
-		const indices = Array.from({ length: end - i }, (_, k) => i + k);
-		const locs = indices.map((idx) => locations[idx]);
-		batches.push({ indices, locs });
-	}
-
 	const totalBatches = batches.length;
-	const totalLocations = locations.length;
 	let completedSinceResume = 0;
 	const fetchStartTime = Date.now();
 
 	console.log(
-		`${totalLocations} locations in ${totalBatches} batches of ${batchSize}. Budget: ${local ? "unlimited" : budget} requests.`,
+		`${totalLocations} locations in ${totalBatches} batches of ${REMOTE_BATCH_SIZE}. Budget: ${REMOTE_BUDGET} requests.`,
 	);
 	console.log(
-		`Delay between batches: ${delayMs / 1000}s. Estimated time: ${formatEta(totalBatches - startBatch, delayMs + 3000)}\n`,
+		`Delay between batches: ${REMOTE_DELAY_MS / 1000}s. Estimated time: ${formatEta(totalBatches - startBatch, REMOTE_DELAY_MS + 3000)}\n`,
 	);
 
 	for (let b = startBatch; b < totalBatches; b++) {
-		if (requestCount >= budget) {
-			if (!local) await saveCheckpoint(b - 1, data, requestCount);
-			throw new BudgetExhaustedError(requestCount, budget);
+		if (requestCount >= REMOTE_BUDGET) {
+			await saveCheckpoint(b - 1, data, requestCount);
+			throw new BudgetExhaustedError(requestCount, REMOTE_BUDGET);
 		}
 
 		const batch = batches[b];
 		const msPerBatch =
 			completedSinceResume > 0
 				? (Date.now() - fetchStartTime) / completedSinceResume
-				: delayMs + 3000;
+				: REMOTE_DELAY_MS + 3000;
 		const remaining = totalBatches - b;
 		const eta = formatEta(remaining, msPerBatch);
 
 		process.stdout.write(
-			`\rBatch ${b + 1}/${totalBatches} (${batch.locs.length} locs) | ${data.size}/${totalLocations} done | ${requestCount}/${local ? "∞" : budget} API calls | ETA: ${eta}   `,
+			`\rBatch ${b + 1}/${totalBatches} (${batch.locs.length} locs) | ${data.size}/${totalLocations} done | ${requestCount}/${REMOTE_BUDGET} API calls | ETA: ${eta}   `,
 		);
 
 		try {
@@ -315,26 +368,24 @@ export async function fetchAllWeather(
 
 			completedSinceResume++;
 
-			if (!local && completedSinceResume % CHECKPOINT_INTERVAL === 0) {
+			if (completedSinceResume % CHECKPOINT_INTERVAL === 0) {
 				await saveCheckpoint(b, data, requestCount);
 				process.stdout.write(" [saved]");
 			}
 		} catch (err) {
-			if (!local) {
-				await saveCheckpoint(b > 0 ? b - 1 : 0, data, requestCount);
-				console.log(`\n\nCheckpoint saved at batch ${b}. Resume with --resume.`);
-			}
+			await saveCheckpoint(b > 0 ? b - 1 : 0, data, requestCount);
+			console.log(`\n\nCheckpoint saved at batch ${b}. Resume with --resume.`);
 			throw err;
 		}
 
 		if (b < totalBatches - 1) {
-			await sleep(delayMs);
+			await sleep(REMOTE_DELAY_MS);
 		}
 	}
 
 	process.stdout.write("\n\n");
 	console.log(`Fetched all ${data.size} locations in ${requestCount} API calls.`);
 
-	if (!local) await saveCheckpoint(totalBatches - 1, data, requestCount);
+	await saveCheckpoint(totalBatches - 1, data, requestCount);
 	return data;
 }

@@ -37,25 +37,34 @@ export default {
 			);
 		}
 
-		let response: Response;
+		try {
+			let response: Response;
 
-		switch (url.pathname) {
-			case "/api/weather":
-				response = await handleWeather(request, env);
-				break;
-			case "/api/scanner":
-				response = await handleScanner(request, env);
-				break;
-			case "/api/range":
-				response = await handleRange(request, env);
-				break;
-			default:
-				response = new Response(JSON.stringify({ error: "Not found" }), {
-					status: 404,
+			switch (url.pathname) {
+				case "/api/weather":
+					response = await handleWeather(request, env);
+					break;
+				case "/api/scanner":
+					response = await handleScanner(request, env);
+					break;
+				case "/api/range":
+					response = await handleRange(request, env);
+					break;
+				default:
+					response = new Response(JSON.stringify({ error: "Not found" }), {
+						status: 404,
+						headers: { "Content-Type": "application/json" },
+					});
+			}
+
+			return withCors(response);
+		} catch {
+			return withCors(
+				new Response(JSON.stringify({ error: "Internal server error" }), {
+					status: 500,
 					headers: { "Content-Type": "application/json" },
-				});
+				}),
+			);
 		}
-
-		return withCors(response);
 	},
 } satisfies ExportedHandler<Env>;

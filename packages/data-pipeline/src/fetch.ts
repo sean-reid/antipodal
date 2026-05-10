@@ -289,7 +289,7 @@ export async function fetchAllWeather(
 
 	for (let b = startBatch; b < totalBatches; b++) {
 		if (requestCount >= budget) {
-			await saveCheckpoint(b - 1, data, requestCount);
+			if (!local) await saveCheckpoint(b - 1, data, requestCount);
 			throw new BudgetExhaustedError(requestCount, budget);
 		}
 
@@ -315,13 +315,15 @@ export async function fetchAllWeather(
 
 			completedSinceResume++;
 
-			if (completedSinceResume % CHECKPOINT_INTERVAL === 0) {
+			if (!local && completedSinceResume % CHECKPOINT_INTERVAL === 0) {
 				await saveCheckpoint(b, data, requestCount);
 				process.stdout.write(" [saved]");
 			}
 		} catch (err) {
-			await saveCheckpoint(b > 0 ? b - 1 : 0, data, requestCount);
-			console.log(`\n\nCheckpoint saved at batch ${b}. Resume with --resume.`);
+			if (!local) {
+				await saveCheckpoint(b > 0 ? b - 1 : 0, data, requestCount);
+				console.log(`\n\nCheckpoint saved at batch ${b}. Resume with --resume.`);
+			}
 			throw err;
 		}
 
@@ -333,6 +335,6 @@ export async function fetchAllWeather(
 	process.stdout.write("\n\n");
 	console.log(`Fetched all ${data.size} locations in ${requestCount} API calls.`);
 
-	await saveCheckpoint(totalBatches - 1, data, requestCount);
+	if (!local) await saveCheckpoint(totalBatches - 1, data, requestCount);
 	return data;
 }

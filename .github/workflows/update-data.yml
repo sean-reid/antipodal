@@ -21,22 +21,40 @@ jobs:
 
       - name: Determine date range
         id: dates
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          FETCH_START=$(date -u -d '10 days ago' +%F)
+          LAST_END=$(npx wrangler r2 object get antipodal-data/summary.json --remote --pipe 2>/dev/null \
+            | node -e "process.stdin.on('data',d=>{try{console.log(JSON.parse(d).endDate)}catch{}})" \
+            || echo "")
+          if [ -z "$LAST_END" ]; then
+            FETCH_START=$(date -u -d '10 days ago' +%F)
+          else
+            FETCH_START=$(date -u -d "$LAST_END - 5 days" +%F)
+          fi
           FETCH_END=$(date -u +%F)
           echo "start=$FETCH_START" >> $GITHUB_OUTPUT
           echo "end=$FETCH_END" >> $GITHUB_OUTPUT
-          echo "Fetching data for $FETCH_START to $FETCH_END"
+          echo "last_end=$LAST_END" >> $GITHUB_OUTPUT
+          echo "Last endDate: ${LAST_END:-none}. Fetching $FETCH_START to $FETCH_END"
 
       - name: Run pipeline
         working-directory: packages/data-pipeline
-        run: pnpm pipeline --range ${{ steps.dates.outputs.start }} ${{ steps.dates.outputs.end }}
+        run: pnpm pipeline --points 5000 --range ${{ steps.dates.outputs.start }} ${{ steps.dates.outputs.end }}
 
       - name: Write summary.json
         run: |
+          EXISTING_START=$(npx wrangler r2 object get antipodal-data/summary.json --remote --pipe 2>/dev/null \
+            | node -e "process.stdin.on('data',d=>{try{console.log(JSON.parse(d).startDate)}catch{}})" \
+            || echo "1940-01-01")
+          [ -z "$EXISTING_START" ] && EXISTING_START="1940-01-01"
           cat > packages/data-pipeline/output/summary.json << EOF
-          {"gridPoints":500,"startDate":"1940-01-01","endDate":"${{ steps.dates.outputs.end }}","monthCount":0}
+          {"gridPoints":5000,"startDate":"$EXISTING_START","endDate":"${{ steps.dates.outputs.end }}","monthCount":0}
           EOF
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Upload monthly files to R2
         working-directory: packages/data-pipeline

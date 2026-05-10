@@ -4,7 +4,7 @@ import { join } from "node:path";
 const DEFAULT_BASE_URL = "https://archive-api.open-meteo.com";
 
 const REMOTE_BATCH_SIZE = 10;
-const LOCAL_BATCH_SIZE = 50;
+const LOCAL_BATCH_SIZE = 100;
 const LOCAL_CONCURRENCY = 8;
 
 const REMOTE_DELAY_MS = 6_000;

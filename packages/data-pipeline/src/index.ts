@@ -65,6 +65,8 @@ async function main() {
 	console.log(`Fetching weather for ${allLocations.length} locations (${startDate} to ${endDate})`);
 	console.log(`Processing in ${chunks.length} chunks of ${YEARS_PER_CHUNK} years\n`);
 
+	let pendingWrite: Promise<number> | null = null;
+
 	for (let i = 0; i < chunks.length; i++) {
 		const [chunkStart, chunkEnd] = chunks[i];
 		console.log(`\n--- Chunk ${i + 1}/${chunks.length}: ${chunkStart} to ${chunkEnd} ---\n`);
@@ -77,10 +79,19 @@ async function main() {
 			skipHealthCheck: i > 0,
 		});
 
-		const monthlyData = transformToMonthlyFiles(grid, rawData);
-		const written = await writeMonthlyFiles(monthlyData);
-		totalMonths += written;
+		if (pendingWrite) {
+			const written = await pendingWrite;
+			totalMonths += written;
+			console.log(`Wrote ${written} monthly files (${totalMonths} total)`);
+		}
 
+		const monthlyData = transformToMonthlyFiles(grid, rawData);
+		pendingWrite = writeMonthlyFiles(monthlyData);
+	}
+
+	if (pendingWrite) {
+		const written = await pendingWrite;
+		totalMonths += written;
 		console.log(`Wrote ${written} monthly files (${totalMonths} total)`);
 	}
 

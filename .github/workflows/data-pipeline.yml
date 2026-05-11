@@ -50,6 +50,8 @@ jobs:
         run: |
           START_YEAR=$(echo "${{ inputs.start_date }}" | cut -d- -f1)
           END_YEAR=$(echo "${{ inputs.end_date }}" | cut -d- -f1)
+          FAILED_YEARS=""
+          MAX_RETRIES=2
 
           for YEAR in $(seq $START_YEAR $END_YEAR); do
             CHUNK_START="${YEAR}-01-01"
@@ -68,67 +70,103 @@ jobs:
             echo ""
             df -h / | tail -1
 
-            echo "--- Syncing ERA5 data for $YEAR ---"
-            docker volume create open-meteo-data
-            docker run --rm \
-              -v open-meteo-data:/app/data \
-              ghcr.io/open-meteo/open-meteo \
-              sync copernicus_era5 temperature_2m,pressure_msl \
-              --year ${YEAR}-${YEAR} \
-              --concurrent 4
+            YEAR_OK=false
+            for ATTEMPT in $(seq 1 $MAX_RETRIES); do
+              echo "--- Attempt $ATTEMPT/$MAX_RETRIES for year $YEAR ---"
 
-            echo "--- Starting API server ---"
-            docker run -d --name open-meteo-api \
-              -v open-meteo-data:/app/data \
-              -p 8080:8080 \
-              ghcr.io/open-meteo/open-meteo \
-              serve --env production --hostname 0.0.0.0 --port 8080
+              docker stop open-meteo-api 2>/dev/null || true
+              docker rm open-meteo-api 2>/dev/null || true
+              docker volume rm open-meteo-data 2>/dev/null || true
 
-            echo "--- Waiting for API health ---"
-            for i in $(seq 1 60); do
-              if curl -sf "http://localhost:8080/v1/archive?latitude=0&longitude=0&start_date=${CHUNK_START}&end_date=${CHUNK_START}&daily=temperature_2m_mean&models=era5" > /dev/null 2>&1; then
-                echo "API healthy after ${i}s"
-                break
+              echo "--- Syncing ERA5 data for $YEAR ---"
+              docker volume create open-meteo-data
+              if ! docker run --rm \
+                -v open-meteo-data:/app/data \
+                ghcr.io/open-meteo/open-meteo \
+                sync copernicus_era5 temperature_2m,pressure_msl \
+                --year ${YEAR}-${YEAR} \
+                --concurrent 4; then
+                echo "Sync failed for $YEAR (attempt $ATTEMPT)"
+                continue
               fi
-              sleep 1
-              if [ "$i" -eq 60 ]; then
-                echo "API failed to start"
-                docker logs open-meteo-api
-                exit 1
+
+              echo "--- Starting API server ---"
+              docker run -d --name open-meteo-api \
+                -v open-meteo-data:/app/data \
+                -p 8080:8080 \
+                ghcr.io/open-meteo/open-meteo \
+                serve --env production --hostname 0.0.0.0 --port 8080
+
+              echo "--- Waiting for API health ---"
+              API_HEALTHY=false
+              for i in $(seq 1 60); do
+                if curl -sf "http://localhost:8080/v1/archive?latitude=0&longitude=0&start_date=${CHUNK_START}&end_date=${CHUNK_START}&daily=temperature_2m_mean&models=era5" > /dev/null 2>&1; then
+                  echo "API healthy after ${i}s"
+                  API_HEALTHY=true
+                  break
+                fi
+                sleep 1
+              done
+
+              if [ "$API_HEALTHY" = false ]; then
+                echo "API failed to start for $YEAR (attempt $ATTEMPT)"
+                docker logs open-meteo-api 2>&1 | tail -20
+                continue
               fi
+
+              echo "--- Running pipeline ---"
+              if ! pnpm --filter @antipodal/data-pipeline pipeline \
+                --base-url http://localhost:8080 \
+                --points ${{ inputs.grid_points }} \
+                --range "$CHUNK_START" "$CHUNK_END"; then
+                echo "Pipeline failed for $YEAR (attempt $ATTEMPT)"
+                continue
+              fi
+
+              echo "--- Uploading to R2 ---"
+              cd packages/data-pipeline
+              for file in output/months/*.json; do
+                key="months/$(basename "$file")"
+                npx wrangler r2 object put "antipodal-data/$key" --file "$file" --remote
+              done
+              if [ "$YEAR" -eq "$START_YEAR" ]; then
+                npx wrangler r2 object put antipodal-data/grid.json --file output/grid.json --remote
+              fi
+              echo "Uploaded $(ls output/months/*.json | wc -l) monthly files for $YEAR"
+              rm -rf output/months/*.json
+              cd ../..
+
+              YEAR_OK=true
+              break
             done
 
-            echo "--- Running pipeline ---"
-            pnpm --filter @antipodal/data-pipeline pipeline \
-              --base-url http://localhost:8080 \
-              --points ${{ inputs.grid_points }} \
-              --range "$CHUNK_START" "$CHUNK_END"
-
-            echo "--- Uploading to R2 ---"
-            cd packages/data-pipeline
-            for file in output/months/*.json; do
-              key="months/$(basename "$file")"
-              npx wrangler r2 object put "antipodal-data/$key" --file "$file" --remote
-            done
-            if [ "$YEAR" -eq "$START_YEAR" ]; then
-              npx wrangler r2 object put antipodal-data/grid.json --file output/grid.json --remote
-            fi
-            echo "Uploaded $(ls output/months/*.json | wc -l) monthly files for $YEAR"
-            rm -rf output/months/*.json
-            cd ../..
-
-            echo "--- Cleaning up Docker for next year ---"
             docker stop open-meteo-api 2>/dev/null || true
             docker rm open-meteo-api 2>/dev/null || true
             docker volume rm open-meteo-data 2>/dev/null || true
+
+            if [ "$YEAR_OK" = false ]; then
+              echo "FAILED: Year $YEAR after $MAX_RETRIES attempts, skipping"
+              FAILED_YEARS="$FAILED_YEARS $YEAR"
+            fi
           done
 
+          if [ -n "$FAILED_YEARS" ]; then
+            echo ""
+            echo "=========================================="
+            echo "  FAILED YEARS:$FAILED_YEARS"
+            echo "=========================================="
+            exit 1
+          fi
+
       - name: Upload summary to R2
+        if: always()
         working-directory: packages/data-pipeline
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: 860e267e26cbf52bdca301d114b3c203
-        run: npx wrangler r2 object put antipodal-data/summary.json --file output/summary.json --remote
+        run: |
+          echo '{"startDate":"1940-01-01","endDate":"${{ inputs.end_date }}"}' > /tmp/summary.json
+          npx wrangler r2 object put antipodal-data/summary.json --file /tmp/summary.json --remote
 
       - name: Cleanup
         if: always()

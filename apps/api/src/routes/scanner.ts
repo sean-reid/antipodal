@@ -41,19 +41,40 @@ export async function handleScanner(request: Request, env: Env): Promise<Respons
 		return jsonResponse({ error: "No data for the requested date" }, 404);
 	}
 
+	let tempMin = Number.POSITIVE_INFINITY;
+	let tempMax = Number.NEGATIVE_INFINITY;
+	let pressMin = Number.POSITIVE_INFINITY;
+	let pressMax = Number.NEGATIVE_INFINITY;
+
+	for (const entry of dayData) {
+		if (entry.t1 !== null && entry.t2 !== null) {
+			const td = Math.abs(entry.t1 - entry.t2);
+			if (td < tempMin) tempMin = td;
+			if (td > tempMax) tempMax = td;
+		}
+		if (entry.p1 !== null && entry.p2 !== null) {
+			const pd = Math.abs(entry.p1 - entry.p2);
+			if (pd < pressMin) pressMin = pd;
+			if (pd > pressMax) pressMax = pd;
+		}
+	}
+
+	const tempRange = tempMax - tempMin || 1;
+	const pressRange = pressMax - pressMin || 1;
+
 	let closestIndex = 0;
-	let smallestCombined = Number.POSITIVE_INFINITY;
+	let smallestScore = Number.POSITIVE_INFINITY;
 
 	for (let i = 0; i < grid.length; i++) {
 		const entry = dayData[i];
 		if (entry.t1 === null || entry.p1 === null || entry.t2 === null || entry.p2 === null) continue;
 
-		const tempDelta = Math.abs((entry.t1 as number) - (entry.t2 as number));
-		const pressureDelta = Math.abs((entry.p1 as number) - (entry.p2 as number));
-		const combined = tempDelta + pressureDelta;
+		const tempDelta = Math.abs(entry.t1 - entry.t2);
+		const pressDelta = Math.abs(entry.p1 - entry.p2);
+		const score = (tempDelta - tempMin) / tempRange + (pressDelta - pressMin) / pressRange;
 
-		if (combined < smallestCombined) {
-			smallestCombined = combined;
+		if (score < smallestScore) {
+			smallestScore = score;
 			closestIndex = i;
 		}
 	}

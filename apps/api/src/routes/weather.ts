@@ -13,12 +13,11 @@ function jsonResponse(data: unknown, status = 200): Response {
 function interpolateFromNearest(
 	lat: number,
 	lng: number,
-	grid: GridPoint[],
+	coords: Array<{ lat: number; lng: number }>,
 	dayData: DayEntry[],
 	tempKey: "t1" | "t2",
 	pressureKey: "p1" | "p2",
 ): { temp: number; pressure: number } {
-	const coords = grid.map((g) => ({ lat: g.lat, lng: g.lng }));
 	const nearest = findNearestPoints(lat, lng, coords, 3);
 
 	const tempPoints = nearest
@@ -79,22 +78,20 @@ export async function handleWeather(request: Request, env: Env): Promise<Respons
 		return jsonResponse({ error: "No data for the requested date" }, 404);
 	}
 
-	const diag = {
-		gridLength: grid.length,
-		dayDataLength: dayData.length,
-		dayDataIsArray: Array.isArray(dayData),
-		firstEntry: dayData[0] ? Object.keys(dayData[0]) : null,
-		sampleIndex: dayData[0],
-	};
+	const primaryCoords = grid.map((g) => ({ lat: g.lat, lng: g.lng }));
+	const antipodalCoords = grid.map((g) => ({ lat: g.antiLat, lng: g.antiLng }));
 
-	if (dayData.length !== grid.length) {
-		return jsonResponse({ error: "Data mismatch", ...diag }, 500);
-	}
-
-	const point = interpolateFromNearest(lat, lng, grid, dayData, "t1", "p1");
+	const point = interpolateFromNearest(lat, lng, primaryCoords, dayData, "t1", "p1");
 
 	const anti = antipodal(lat, lng);
-	const antipodePoint = interpolateFromNearest(anti.lat, anti.lng, grid, dayData, "t2", "p2");
+	const antipodePoint = interpolateFromNearest(
+		anti.lat,
+		anti.lng,
+		antipodalCoords,
+		dayData,
+		"t2",
+		"p2",
+	);
 
 	return jsonResponse({
 		point: { lat, lng, temp: point.temp, pressure: point.pressure },

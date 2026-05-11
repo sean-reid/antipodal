@@ -1,6 +1,6 @@
 import { fetchScanner } from "@/lib/api";
 import { useAppStore } from "@/stores/app-store";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export function useScanner() {
 	const [isScanning, setIsScanning] = useState(false);
@@ -8,18 +8,6 @@ export function useScanner() {
 	const setScannerData = useAppStore((s) => s.setScannerData);
 	const scannerData = useAppStore((s) => s.scannerData);
 	const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-	const scan = useCallback(async () => {
-		setIsScanning(true);
-		try {
-			const data = await fetchScanner(selectedDate);
-			setScannerData(data);
-		} catch {
-			setScannerData(null);
-		} finally {
-			setIsScanning(false);
-		}
-	}, [selectedDate, setScannerData]);
 
 	useEffect(() => {
 		clearTimeout(timerRef.current);
@@ -45,5 +33,5 @@ export function useScanner() {
 		};
 	}, [selectedDate, setScannerData]);
 
-	return { scan, isScanning, scannerData };
+	return { isScanning, scannerData };
 }

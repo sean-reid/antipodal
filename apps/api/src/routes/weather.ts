@@ -79,6 +79,18 @@ export async function handleWeather(request: Request, env: Env): Promise<Respons
 		return jsonResponse({ error: "No data for the requested date" }, 404);
 	}
 
+	const diag = {
+		gridLength: grid.length,
+		dayDataLength: dayData.length,
+		dayDataIsArray: Array.isArray(dayData),
+		firstEntry: dayData[0] ? Object.keys(dayData[0]) : null,
+		sampleIndex: dayData[0],
+	};
+
+	if (dayData.length !== grid.length) {
+		return jsonResponse({ error: "Data mismatch", ...diag }, 500);
+	}
+
 	const point = interpolateFromNearest(lat, lng, grid, dayData, "t1", "p1");
 
 	const anti = antipodal(lat, lng);

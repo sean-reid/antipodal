@@ -58,9 +58,10 @@ export default {
 			}
 
 			return withCors(response);
-		} catch {
+		} catch (err) {
+			const message = err instanceof Error ? err.message : "Unknown error";
 			return withCors(
-				new Response(JSON.stringify({ error: "Internal server error" }), {
+				new Response(JSON.stringify({ error: "Internal server error", detail: message }), {
 					status: 500,
 					headers: { "Content-Type": "application/json" },
 				}),

@@ -41,13 +41,8 @@ export function transformToMonthlyFiles(
 		const pointData = rawData.get(pointIdx);
 		const antipodalData = rawData.get(pointIdx + n);
 
-		if (!pointData || !antipodalData) {
-			console.warn(`Missing data for pair ${pointIdx}, skipping`);
-			continue;
-		}
-
-		for (let dayIdx = 0; dayIdx < pointData.time.length; dayIdx++) {
-			const dateStr = pointData.time[dayIdx];
+		for (let dayIdx = 0; dayIdx < referenceDates.length; dayIdx++) {
+			const dateStr = referenceDates[dayIdx];
 			const monthKey = dateStr.slice(0, 7);
 			// biome-ignore lint/style/noNonNullAssertion: key was just inserted in the loop above
 			const monthly = monthlyMap.get(monthKey)!;
@@ -56,12 +51,16 @@ export function transformToMonthlyFiles(
 				monthly.days[dateStr] = [];
 			}
 
-			monthly.days[dateStr].push({
-				t1: pointData.temperature_2m_mean[dayIdx],
-				p1: pointData.pressure_msl_mean[dayIdx],
-				t2: antipodalData.temperature_2m_mean[dayIdx],
-				p2: antipodalData.pressure_msl_mean[dayIdx],
-			});
+			if (!pointData || !antipodalData) {
+				monthly.days[dateStr].push({ t1: null, p1: null, t2: null, p2: null });
+			} else {
+				monthly.days[dateStr].push({
+					t1: pointData.temperature_2m_mean[dayIdx],
+					p1: pointData.pressure_msl_mean[dayIdx],
+					t2: antipodalData.temperature_2m_mean[dayIdx],
+					p2: antipodalData.pressure_msl_mean[dayIdx],
+				});
+			}
 		}
 	}
 

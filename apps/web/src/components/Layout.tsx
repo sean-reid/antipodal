@@ -81,8 +81,8 @@ export function Layout() {
 					absolute z-20
 					bottom-20 left-2 right-2
 					sm:bottom-auto sm:top-16 sm:right-4 sm:left-auto sm:w-80
-					bg-navy-900/95 backdrop-blur-sm rounded-xl border border-navy-700 p-4 sm:p-5
-					max-h-[40vh] sm:max-h-[calc(100vh-8rem)] overflow-y-auto
+					bg-navy-900/95 backdrop-blur-sm rounded-xl border border-navy-700 p-3 sm:p-5
+					sm:max-h-[calc(100vh-8rem)] sm:overflow-y-auto
 				"
 				>
 					<ComparisonView />

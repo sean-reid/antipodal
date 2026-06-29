@@ -41,7 +41,9 @@ jobs:
       - run: pnpm --filter @antipodal/geo build
 
       - name: Pull Open-Meteo image
-        run: docker pull ghcr.io/open-meteo/open-meteo
+        # Pinned to a known-good digest. The :latest tag is rebuilt upstream
+        # without warning and has shipped images with broken shared libraries.
+        run: docker pull ghcr.io/open-meteo/open-meteo@sha256:1aed7d47ddac28c1f8b69ea94b5e604e05df469baa43843629baaac4a30bac20
 
       - name: Process year-by-year
         env:
@@ -82,7 +84,7 @@ jobs:
               docker volume create open-meteo-data
               if ! docker run --rm \
                 -v open-meteo-data:/app/data \
-                ghcr.io/open-meteo/open-meteo \
+                ghcr.io/open-meteo/open-meteo@sha256:1aed7d47ddac28c1f8b69ea94b5e604e05df469baa43843629baaac4a30bac20 \
                 sync copernicus_era5 temperature_2m,pressure_msl \
                 --year ${YEAR}-${YEAR} \
                 --concurrent 4; then
@@ -94,7 +96,7 @@ jobs:
               docker run -d --name open-meteo-api \
                 -v open-meteo-data:/app/data \
                 -p 8080:8080 \
-                ghcr.io/open-meteo/open-meteo \
+                ghcr.io/open-meteo/open-meteo@sha256:1aed7d47ddac28c1f8b69ea94b5e604e05df469baa43843629baaac4a30bac20 \
                 serve --env production --hostname 0.0.0.0 --port 8080
 
               echo "--- Waiting for API health ---"

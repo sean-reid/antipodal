@@ -39,7 +39,9 @@ jobs:
           echo "Last endDate: ${LAST_END:-none}. Fetching $FETCH_START to $FETCH_END"
 
       - name: Pull Open-Meteo image
-        run: docker pull ghcr.io/open-meteo/open-meteo
+        # Pinned to a known-good digest. The :latest tag is rebuilt upstream
+        # without warning and has shipped images with broken shared libraries.
+        run: docker pull ghcr.io/open-meteo/open-meteo@sha256:1aed7d47ddac28c1f8b69ea94b5e604e05df469baa43843629baaac4a30bac20
 
       - name: Create data volume
         run: docker volume create open-meteo-data
@@ -51,7 +53,7 @@ jobs:
           echo "Syncing ERA5 hourly data for ${START_YEAR}-${END_YEAR}..."
           docker run --rm \
             -v open-meteo-data:/app/data \
-            ghcr.io/open-meteo/open-meteo \
+            ghcr.io/open-meteo/open-meteo@sha256:1aed7d47ddac28c1f8b69ea94b5e604e05df469baa43843629baaac4a30bac20 \
             sync copernicus_era5 temperature_2m,pressure_msl \
             --year ${START_YEAR}-${END_YEAR} \
             --concurrent 4
@@ -62,7 +64,7 @@ jobs:
           docker run -d --name open-meteo-api \
             -v open-meteo-data:/app/data \
             -p 8080:8080 \
-            ghcr.io/open-meteo/open-meteo \
+            ghcr.io/open-meteo/open-meteo@sha256:1aed7d47ddac28c1f8b69ea94b5e604e05df469baa43843629baaac4a30bac20 \
             serve --env production --hostname 0.0.0.0 --port 8080
 
       - name: Wait for API health
